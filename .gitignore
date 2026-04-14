@@ -1,0 +1,74 @@
+# Claude Code
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Training data & model weights
+Secu-revised/data/
+Secu-revised/model/
+
+# Image datasets & outputs (large binary files)
+Bugdatasets/
+adaptive_output/
+cluster_previews*/
+cropped_border/
+masked_output/
+tiles_output/
+
+# Model weights & checkpoints
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.pkl
+*.bin
+*.onnx
+
+# Logs & results
+*.log
+logs/
+runs/
+wandb/
+mlruns/
+
+# Temporary files
+*.tmp
+*.bak
+tmp/
+temp/
