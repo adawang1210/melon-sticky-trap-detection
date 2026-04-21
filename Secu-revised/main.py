@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 # Copyright (c) Alibaba Group
+import os
+os.environ['USE_LIBUV'] = '0'  # 修復 Windows PyTorch distributed libuv 相容性問題
+
 import argparse
 import builtins
-import os
 import random
 import time
 import warnings
