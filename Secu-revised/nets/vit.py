@@ -19,30 +19,26 @@ class ViT(nn.Module):
 
 
 class DINOv2(nn.Module):
-    """DINOv2 封裝，介面與 ViT 完全相同，可直接替換使用。
+    """DINOv2 封裝，透過 timm 載入，相容 Python 3.8+。
+
+    介面與 ViT 完全相同，可直接替換使用。
 
     用法（在 main.py 中）：
         --backbone dinov2
 
-    支援的模型大小（透過 model_size 參數控制）：
-        's' → dinov2_vits14  (21M params, embed_dim=384)   ← 記憶體較小時使用
-        'b' → dinov2_vitb14  (86M params, embed_dim=768)   ← 預設，推薦
-        'l' → dinov2_vitl14  (300M params, embed_dim=1024) ← 效果最好但吃記憶體
+    使用 timm 的 vit_base_patch14_dinov2 模型（86M params, embed_dim=768）。
     """
 
-    # 模型名稱 → 特徵維度 對照表
-    _MODELS = {
-        's': ('dinov2_vits14', 384),
-        'b': ('dinov2_vitb14', 768),
-        'l': ('dinov2_vitl14', 1024),
-    }
-
-    def __init__(self, num_classes=512, model_size='b'):
+    def __init__(self, num_classes=512):
         super().__init__()
-        model_name, embed_dim = self._MODELS[model_size]
-        self.backbone = torch.hub.load(
-            'facebookresearch/dinov2', model_name, pretrained=True
+        # 透過 timm 載入 DINOv2（相容 Python 3.8，不需要 torch.hub）
+        self.backbone = timm.create_model(
+            'vit_base_patch14_dinov2.lvd142m',
+            pretrained=True,
+            num_classes=0,  # 移除分類頭，只輸出特徵
         )
+        embed_dim = self.backbone.num_features  # 768
+
         # 凍結 backbone（DINOv2 已經預訓練好，只訓練 projection head）
         for param in self.backbone.parameters():
             param.requires_grad = False
@@ -51,9 +47,8 @@ class DINOv2(nn.Module):
         self.fc = nn.Linear(embed_dim, num_classes)
 
     def forward(self, x):
-        # DINOv2 輸入建議 224x224（會自動 interpolate position embedding）
         with torch.no_grad():
-            features = self.backbone(x)  # (B, embed_dim)
+            features = self.backbone(x)  # (B, 768)
         x = self.fc(features)
         return x
 

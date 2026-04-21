@@ -1,0 +1,39 @@
+# ============================================
+# PyTorch（請根據遠端 GPU 的 CUDA 版本選擇一種安裝方式）
+#
+# 先在遠端跑 nvidia-smi 確認 CUDA 版本，然後：
+#
+# CUDA 11.8:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+#
+# CUDA 12.1:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+#
+# CUDA 12.4:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+#
+# 安裝完 PyTorch 後，再執行：
+#   pip install -r requirements.txt
+# ============================================
+
+# Vision model library (ViT / DINOv2)
+timm>=0.9.0
+
+# 科學計算
+numpy
+scipy
+pandas
+
+# 機器學習指標
+scikit-learn
+munkres
+
+# 影像處理
+Pillow
+opencv-python
+
+# 視覺化
+matplotlib
+
+# TensorBoard
+tensorboard
