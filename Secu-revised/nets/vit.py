@@ -32,10 +32,12 @@ class DINOv2(nn.Module):
     def __init__(self, num_classes=512):
         super().__init__()
         # 透過 timm 載入 DINOv2（相容 Python 3.8，不需要 torch.hub）
+        # 使用 reg4 版本（有 register tokens），輸入 224x224 與現有 pipeline 相容
         self.backbone = timm.create_model(
-            'vit_base_patch14_dinov2.lvd142m',
+            'vit_base_patch14_reg4_dinov2.lvd142m',
             pretrained=True,
             num_classes=0,  # 移除分類頭，只輸出特徵
+            img_size=224,   # 強制 224x224 輸入
         )
         embed_dim = self.backbone.num_features  # 768
 
