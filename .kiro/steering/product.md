@@ -2,7 +2,7 @@
 
 本專案將無監督深度聚類技術應用於農業影像分析，專門用於偵測與分類洋香瓜溫室中黃色黏蟲板上的昆蟲。輸入資料為無標籤影像，系統自動學習特徵並分群。
 
-核心 ML 元件是 **SeCu**（Stable Cluster Discrimination）的改良實作，原論文發表於 ICCV 2023，作者為 Qi Qian（阿里巴巴集團）。改良版新增了基於 medoid 的中心重新計算、圖模組化損失（MML），以及 ViT 骨幹網路支援。
+核心 ML 元件是 **SeCu**（Stable Cluster Discrimination）的改良實作，原論文發表於 ICCV 2023，作者為 Qi Qian（阿里巴巴集團）。改良版新增了基於 medoid 的中心重新計算、圖模組化損失（MML），以及 ViT / DINOv2 骨幹網路支援。
 
 完整流程：
 1. 拍攝黏蟲板照片（大尺寸高解析度影像）
