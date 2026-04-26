@@ -97,17 +97,23 @@ def extract_features(image_paths, device="cuda", batch_size=32):
 
 
 def run_kmeans(features, k):
-    """執行 K-Means 聚類。"""
+    """執行 K-Means 聚類，並計算 Silhouette Score。"""
+    from sklearn.metrics import silhouette_score
+
     log.info("執行 K-Means (k=%d)...", k)
     kmeans = KMeans(n_clusters=k, random_state=42, n_init=20)
     labels = kmeans.fit_predict(features)
+
+    # Silhouette Score：-1（最差）到 1（最好），越高代表分群越清晰
+    score = silhouette_score(features, labels)
+    log.info("  Silhouette Score: %.4f", score)
 
     # 印出每個子群的大小
     for c in range(k):
         count = (labels == c).sum()
         log.info("  sub_%d: %d 張", c, count)
 
-    return labels
+    return labels, score
 
 
 def save_results(image_paths, labels, k, output_dir: Path):
@@ -191,8 +197,10 @@ if __name__ == "__main__":
     features = extract_features(image_paths, device=args.device, batch_size=args.batch_size)
 
     # 對每個 k 值跑 K-Means
+    scores = {}
     for k in args.k:
-        labels = run_kmeans(features, k)
+        labels, score = run_kmeans(features, k)
+        scores[k] = score
         result_dir = save_results(image_paths, labels, k, output_dir)
 
         if args.preview:
@@ -201,5 +209,16 @@ if __name__ == "__main__":
                          cols=args.preview_cols,
                          rows=args.preview_rows,
                          size=args.preview_size)
+
+    # 印出總結：推薦最佳 K
+    if len(scores) > 1:
+        log.info("=" * 50)
+        log.info("Silhouette Score 總結（越高越好）：")
+        for k, s in sorted(scores.items()):
+            marker = " ← 推薦" if s == max(scores.values()) else ""
+            log.info("  K=%d : %.4f%s", k, s, marker)
+        best_k = max(scores, key=scores.get)
+        log.info("建議使用 K=%d（Silhouette Score 最高）", best_k)
+        log.info("=" * 50)
 
     log.info("✅ 全部完成！")
