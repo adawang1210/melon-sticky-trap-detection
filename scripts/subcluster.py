@@ -175,9 +175,10 @@ def parse_args():
         description="對單一 cluster 進行子聚類",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("-i", "--input", required=True, help="要子聚類的 cluster 資料夾")
+    parser.add_argument("-i", "--input", required=True, help="要子聚類的 cluster 資料夾，或用 --all 時指向包含所有 cluster_X 的父資料夾")
     parser.add_argument("-o", "--output", default=None, help="輸出資料夾（預設：<input>_subcluster）")
     parser.add_argument("-k", "--k", type=int, nargs="+", default=[3], help="子分群數（可指定多個，如 -k 2 3 4）")
+    parser.add_argument("--all", action="store_true", help="對 input 底下所有 cluster_X 子資料夾都跑子聚類")
     parser.add_argument("--device", default="cuda", help="計算裝置")
     parser.add_argument("--batch-size", type=int, default=32, help="特徵提取 batch size")
     parser.add_argument("--preview", action="store_true", help="產生預覽圖")
@@ -187,18 +188,20 @@ def parse_args():
     return parser.parse_args()
 
 
-if __name__ == "__main__":
-    args = parse_args()
-    input_dir = Path(args.input)
-    output_dir = Path(args.output) if args.output else input_dir.parent / f"{input_dir.name}_subcluster"
+def process_one_cluster(cluster_dir, output_dir, k_values, args):
+    """對單一 cluster 資料夾跑子聚類。"""
+    log.info("=" * 50)
+    log.info("處理 %s", cluster_dir.name)
+    log.info("=" * 50)
 
-    # 收集圖片 & 提取特徵（只做一次）
-    image_paths = collect_images(input_dir)
+    image_paths = collect_images(cluster_dir)
     features = extract_features(image_paths, device=args.device, batch_size=args.batch_size)
 
-    # 對每個 k 值跑 K-Means
     scores = {}
-    for k in args.k:
+    for k in k_values:
+        if k >= len(image_paths):
+            log.warning("  K=%d >= 圖片數 %d，跳過", k, len(image_paths))
+            continue
         labels, score = run_kmeans(features, k)
         scores[k] = score
         result_dir = save_results(image_paths, labels, k, output_dir)
@@ -210,15 +213,78 @@ if __name__ == "__main__":
                          rows=args.preview_rows,
                          size=args.preview_size)
 
-    # 印出總結：推薦最佳 K
     if len(scores) > 1:
-        log.info("=" * 50)
-        log.info("Silhouette Score 總結（越高越好）：")
+        log.info("-" * 40)
+        log.info("%s Silhouette Score 總結：", cluster_dir.name)
         for k, s in sorted(scores.items()):
             marker = " ← 推薦" if s == max(scores.values()) else ""
             log.info("  K=%d : %.4f%s", k, s, marker)
         best_k = max(scores, key=scores.get)
-        log.info("建議使用 K=%d（Silhouette Score 最高）", best_k)
-        log.info("=" * 50)
+        log.info("建議使用 K=%d", best_k)
+
+    return scores
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    input_dir = Path(args.input)
+
+    if args.all:
+        # --all 模式：對 input 底下所有 cluster_X 子資料夾跑
+        cluster_dirs = sorted(
+            p for p in input_dir.iterdir()
+            if p.is_dir() and p.name.startswith("cluster_")
+        )
+        if not cluster_dirs:
+            log.error("在 '%s' 找不到任何 cluster_X 資料夾", input_dir)
+            exit(1)
+
+        log.info("找到 %d 個 cluster，開始逐一子聚類...", len(cluster_dirs))
+        all_results = {}
+
+        for cluster_dir in cluster_dirs:
+            output_dir = input_dir / f"{cluster_dir.name}_subcluster"
+            scores = process_one_cluster(cluster_dir, output_dir, args.k, args)
+            all_results[cluster_dir.name] = scores
+
+        # 最終總結
+        log.info("\n" + "=" * 60)
+        log.info("全部 cluster 子聚類結果總結")
+        log.info("=" * 60)
+        for name, scores in sorted(all_results.items()):
+            if scores:
+                best_k = max(scores, key=scores.get)
+                best_s = scores[best_k]
+                log.info("  %s → 建議 K=%d (score=%.4f)", name, best_k, best_s)
+            else:
+                log.info("  %s → 無法子聚類", name)
+    else:
+        # 單一 cluster 模式
+        output_dir = Path(args.output) if args.output else input_dir.parent / f"{input_dir.name}_subcluster"
+        image_paths = collect_images(input_dir)
+        features = extract_features(image_paths, device=args.device, batch_size=args.batch_size)
+
+        scores = {}
+        for k in args.k:
+            labels, score = run_kmeans(features, k)
+            scores[k] = score
+            result_dir = save_results(image_paths, labels, k, output_dir)
+
+            if args.preview:
+                preview_dir = output_dir / f"k{k}_preview"
+                make_preview(result_dir, preview_dir,
+                             cols=args.preview_cols,
+                             rows=args.preview_rows,
+                             size=args.preview_size)
+
+        if len(scores) > 1:
+            log.info("=" * 50)
+            log.info("Silhouette Score 總結（越高越好）：")
+            for k, s in sorted(scores.items()):
+                marker = " ← 推薦" if s == max(scores.values()) else ""
+                log.info("  K=%d : %.4f%s", k, s, marker)
+            best_k = max(scores, key=scores.get)
+            log.info("建議使用 K=%d（Silhouette Score 最高）", best_k)
+            log.info("=" * 50)
 
     log.info("✅ 全部完成！")
