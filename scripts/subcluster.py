@@ -96,7 +96,41 @@ def extract_features(image_paths, device="cuda", batch_size=32):
     return features
 
 
-def run_kmeans(features, k):
+def extract_color_features(image_paths, bins=32):
+    """提取每張圖片的 HSV 顏色直方圖特徵。"""
+    log.info("提取顏色特徵（HSV 直方圖，bins=%d）...", bins)
+    all_hists = []
+    for p in image_paths:
+        img = Image.open(p).convert("HSV")
+        arr = np.array(img, dtype=np.uint8)
+        h_hist, _ = np.histogram(arr[:, :, 0], bins=bins, range=(0, 255))
+        s_hist, _ = np.histogram(arr[:, :, 1], bins=bins, range=(0, 255))
+        v_hist, _ = np.histogram(arr[:, :, 2], bins=bins, range=(0, 255))
+        hist = np.concatenate([h_hist, s_hist, v_hist]).astype(np.float32)
+        hist = hist / (hist.sum() + 1e-8)  # L1 normalize
+        all_hists.append(hist)
+    features = np.stack(all_hists)
+    log.info("顏色特徵 shape: %s", features.shape)  # (N, bins*3)
+    return features
+
+
+def combine_features(dino_features, color_features, color_weight=1.0):
+    """將 DINOv2 特徵與顏色特徵拼接，並用 color_weight 控制顏色影響力。
+
+    DINOv2 特徵先做 L2 normalize，顏色特徵乘以 color_weight 後拼接。
+    color_weight=0 → 純 DINOv2
+    color_weight=1 → 顏色與 DINOv2 等權重
+    color_weight=3 → 顏色影響力是 DINOv2 的 3 倍
+    """
+    from sklearn.preprocessing import normalize
+    dino_norm = normalize(dino_features, norm='l2')
+    color_norm = normalize(color_features, norm='l2') * color_weight
+    combined = np.concatenate([dino_norm, color_norm], axis=1)
+    log.info("合併特徵 shape: %s（DINOv2=%d + 顏色=%d, weight=%.1f）",
+             combined.shape, dino_features.shape[1], color_features.shape[1], color_weight)
+    return combined
+
+
     """執行 K-Means 聚類，並計算 Silhouette Score。"""
     from sklearn.metrics import silhouette_score
 
@@ -181,6 +215,8 @@ def parse_args():
     parser.add_argument("--all", action="store_true", help="對 input 底下所有 cluster_X 子資料夾都跑子聚類")
     parser.add_argument("--device", default="cuda", help="計算裝置")
     parser.add_argument("--batch-size", type=int, default=32, help="特徵提取 batch size")
+    parser.add_argument("--color-weight", type=float, default=1.0,
+                        help="顏色特徵權重（0=純DINOv2, 1=等權重, 3=顏色主導）")
     parser.add_argument("--preview", action="store_true", help="產生預覽圖")
     parser.add_argument("--preview-cols", type=int, default=10, help="預覽圖每排張數")
     parser.add_argument("--preview-rows", type=int, default=5, help="預覽圖排數")
@@ -195,7 +231,9 @@ def process_one_cluster(cluster_dir, output_dir, k_values, args):
     log.info("=" * 50)
 
     image_paths = collect_images(cluster_dir)
-    features = extract_features(image_paths, device=args.device, batch_size=args.batch_size)
+    dino_features = extract_features(image_paths, device=args.device, batch_size=args.batch_size)
+    color_features = extract_color_features(image_paths)
+    features = combine_features(dino_features, color_features, color_weight=args.color_weight)
 
     scores = {}
     for k in k_values:
@@ -262,7 +300,9 @@ if __name__ == "__main__":
         # 單一 cluster 模式
         output_dir = Path(args.output) if args.output else input_dir.parent / f"{input_dir.name}_subcluster"
         image_paths = collect_images(input_dir)
-        features = extract_features(image_paths, device=args.device, batch_size=args.batch_size)
+        dino_features = extract_features(image_paths, device=args.device, batch_size=args.batch_size)
+        color_features = extract_color_features(image_paths)
+        features = combine_features(dino_features, color_features, color_weight=args.color_weight)
 
         scores = {}
         for k in args.k:
