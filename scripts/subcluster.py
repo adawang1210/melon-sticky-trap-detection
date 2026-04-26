@@ -131,6 +131,24 @@ def combine_features(dino_features, color_features, color_weight=1.0):
     return combined
 
 
+def run_kmeans(features, k):
+    """執行 K-Means 聚類，並計算 Silhouette Score。"""
+    from sklearn.metrics import silhouette_score
+
+    log.info("執行 K-Means (k=%d)...", k)
+    kmeans = KMeans(n_clusters=k, random_state=42, n_init=20)
+    labels = kmeans.fit_predict(features)
+
+    score = silhouette_score(features, labels)
+    log.info("  Silhouette Score: %.4f", score)
+
+    for c in range(k):
+        count = (labels == c).sum()
+        log.info("  sub_%d: %d 張", c, count)
+
+    return labels, score
+
+
     """執行 K-Means 聚類，並計算 Silhouette Score。"""
     from sklearn.metrics import silhouette_score
 
