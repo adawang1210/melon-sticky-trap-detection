@@ -214,33 +214,60 @@ def combine_all_features(dino_feat, color_feat, size_feat,
 # ============================================================
 
 def run_hdbscan(features, min_cluster_size=15, min_samples=5):
-    """執行 HDBSCAN 聚類，噪點自動分配到最近的子群。"""
+    """執行 HDBSCAN 聚類，噪點自動分配到最近的子群。
+
+    如果 HDBSCAN 找不到任何子群（全部是噪點），會自動降低 min_cluster_size 重試，
+    最終 fallback 到 K-Means k=2。
+    """
     import hdbscan
 
-    log.info("執行 HDBSCAN（min_cluster_size=%d, min_samples=%d）...",
-             min_cluster_size, min_samples)
-    clusterer = hdbscan.HDBSCAN(
-        min_cluster_size=min_cluster_size,
-        min_samples=min_samples,
-        metric='euclidean',
-    )
-    labels = clusterer.fit_predict(features)
+    # 嘗試不同的 min_cluster_size，從使用者指定的值開始逐步降低
+    attempts = [min_cluster_size]
+    for fallback in [30, 20, 10, 5]:
+        if fallback < min_cluster_size:
+            attempts.append(fallback)
 
-    n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-    n_noise = (labels == -1).sum()
-    log.info("  找到 %d 個子群，%d 個噪點", n_clusters, n_noise)
+    labels = None
+    n_clusters = 0
+
+    for mcs in attempts:
+        log.info("執行 HDBSCAN（min_cluster_size=%d, min_samples=%d）...", mcs, min_samples)
+        clusterer = hdbscan.HDBSCAN(
+            min_cluster_size=mcs,
+            min_samples=min(min_samples, mcs),
+            metric='euclidean',
+        )
+        labels = clusterer.fit_predict(features)
+        n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+        n_noise = (labels == -1).sum()
+        log.info("  找到 %d 個子群，%d 個噪點", n_clusters, n_noise)
+
+        if n_clusters >= 2:
+            break
+        elif n_clusters == 1 and n_noise == 0:
+            # 只有 1 群且沒有噪點 = 這個 cluster 本身就很純淨
+            log.info("  此 cluster 很純淨，不需要再細分")
+            break
+        else:
+            log.warning("  子群數不足，嘗試降低 min_cluster_size...")
+
+    # 如果所有嘗試都失敗，fallback 到 K-Means
+    if n_clusters == 0:
+        log.warning("  HDBSCAN 無法找到子群，fallback 到 K-Means k=2")
+        kmeans = KMeans(n_clusters=2, random_state=42, n_init=20)
+        labels = kmeans.fit_predict(features)
+        n_clusters = 2
 
     # 把噪點分配到最近的子群
+    n_noise = (labels == -1).sum()
     if n_noise > 0 and n_clusters > 0:
         log.info("  將 %d 個噪點分配到最近的子群...", n_noise)
-        # 計算每個子群的中心
         cluster_ids = sorted(set(labels) - {-1})
         centers = np.array([features[labels == c].mean(axis=0) for c in cluster_ids])
 
         noise_mask = labels == -1
         noise_features = features[noise_mask]
 
-        # 計算每個噪點到每個中心的距離，分配到最近的
         from scipy.spatial.distance import cdist
         dists = cdist(noise_features, centers, metric='euclidean')
         nearest = dists.argmin(axis=1)
