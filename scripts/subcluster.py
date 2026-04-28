@@ -214,7 +214,7 @@ def combine_all_features(dino_feat, color_feat, size_feat,
 # ============================================================
 
 def run_hdbscan(features, min_cluster_size=15, min_samples=5):
-    """執行 HDBSCAN 聚類（自動決定 cluster 數量）。"""
+    """執行 HDBSCAN 聚類，噪點自動分配到最近的子群。"""
     import hdbscan
 
     log.info("執行 HDBSCAN（min_cluster_size=%d, min_samples=%d）...",
@@ -230,18 +230,33 @@ def run_hdbscan(features, min_cluster_size=15, min_samples=5):
     n_noise = (labels == -1).sum()
     log.info("  找到 %d 個子群，%d 個噪點", n_clusters, n_noise)
 
+    # 把噪點分配到最近的子群
+    if n_noise > 0 and n_clusters > 0:
+        log.info("  將 %d 個噪點分配到最近的子群...", n_noise)
+        # 計算每個子群的中心
+        cluster_ids = sorted(set(labels) - {-1})
+        centers = np.array([features[labels == c].mean(axis=0) for c in cluster_ids])
+
+        noise_mask = labels == -1
+        noise_features = features[noise_mask]
+
+        # 計算每個噪點到每個中心的距離，分配到最近的
+        from scipy.spatial.distance import cdist
+        dists = cdist(noise_features, centers, metric='euclidean')
+        nearest = dists.argmin(axis=1)
+        labels[noise_mask] = np.array(cluster_ids)[nearest]
+        log.info("  噪點已全部分配完畢")
+
     for c in sorted(set(labels)):
         count = (labels == c).sum()
-        name = f"noise" if c == -1 else f"sub_{c}"
-        log.info("  %s: %d 張", name, count)
+        log.info("  sub_%d: %d 張", c, count)
 
-    # 計算 Silhouette Score（排除噪點）
+    # 計算 Silhouette Score
     score = None
-    valid = labels >= 0
-    if valid.sum() > 1 and len(set(labels[valid])) > 1:
+    if len(set(labels)) > 1:
         from sklearn.metrics import silhouette_score
-        score = silhouette_score(features[valid], labels[valid])
-        log.info("  Silhouette Score（排除噪點）: %.4f", score)
+        score = silhouette_score(features, labels)
+        log.info("  Silhouette Score: %.4f", score)
 
     return labels, n_clusters, score
 
