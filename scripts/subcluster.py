@@ -1,23 +1,27 @@
 """
 subcluster.py — 對單一 cluster 進行子聚類（Hierarchical Clustering）
 
-使用 frozen DINOv2 提取特徵，再用 K-Means 進行子分群。
-不需要 GPU 訓練，幾分鐘即可完成。
+使用 frozen DINOv2 patch-level 特徵 + HSV 顏色直方圖 + 大小/面積特徵，
+支援 HDBSCAN（自動決定 K）和 K-Means 兩種聚類方法。
 
 用法：
-  python subcluster.py -i ../Secu-revised/output/cluster9/cluster_1 -k 3
-  python subcluster.py -i ../Secu-revised/output/cluster9/cluster_1 -k 2 3 4 5 --preview
-  python subcluster.py -i <cluster資料夾> -k <子分群數> -o <輸出資料夾>
+  # HDBSCAN（自動決定子群數，推薦）
+  python subcluster.py -i <cluster資料夾> --method hdbscan --preview
+  python subcluster.py -i <父資料夾> --all --method hdbscan --preview
+
+  # K-Means（手動指定 K）
+  python subcluster.py -i <cluster資料夾> --method kmeans -k 2 3 4 5 --preview
+
+  # 調整特徵權重
+  python subcluster.py -i <cluster資料夾> --method hdbscan --color-weight 2.0 --size-weight 1.5
 
 輸出：
-  output/
-  ├── k3/
-  │   ├── sub_0/    ← 子群 0 的圖片
+  <input>_subcluster/
+  ├── hdbscan/          或 k3/
+  │   ├── sub_0/
   │   ├── sub_1/
-  │   └── sub_2/
-  └── k3_preview/
-      ├── sub_0.jpg ← 預覽圖（--preview 時產生）
-      └── ...
+  │   └── noise/        ← HDBSCAN 的噪點（K-Means 沒有）
+  └── hdbscan_preview/  或 k3_preview/
 """
 
 import argparse
@@ -29,6 +33,7 @@ import numpy as np
 import torch
 from PIL import Image
 from sklearn.cluster import KMeans
+from sklearn.preprocessing import normalize
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,8 +45,11 @@ log = logging.getLogger(__name__)
 SUPPORTED_EXT = {".jpg", ".jpeg", ".png"}
 
 
+# ============================================================
+# 特徵提取
+# ============================================================
+
 def collect_images(input_dir: Path):
-    """收集所有圖片路徑。"""
     images = sorted(
         p for p in input_dir.rglob("*")
         if p.is_file() and p.suffix.lower() in SUPPORTED_EXT
@@ -52,12 +60,17 @@ def collect_images(input_dir: Path):
     return images
 
 
-def extract_features(image_paths, device="cuda", batch_size=32):
-    """用 frozen DINOv2 (timm) 提取特徵。"""
+def extract_patch_features(image_paths, device="cuda", batch_size=32):
+    """用 frozen DINOv2 提取 patch-level 特徵（mean + std = 768×2 = 1536 維）。
+
+    相比 CLS token（768 維），patch-level 特徵保留了更多空間細節，
+    對區分形態相似但細節不同的昆蟲更有效。
+    """
     import timm
+
     from torchvision import transforms
 
-    log.info("載入 DINOv2 模型...")
+    log.info("載入 DINOv2 模型（patch-level 特徵）...")
     model = timm.create_model(
         'vit_base_patch14_reg4_dinov2.lvd142m',
         pretrained=True,
@@ -74,7 +87,7 @@ def extract_features(image_paths, device="cuda", batch_size=32):
     ])
 
     all_features = []
-    log.info("提取特徵中（batch_size=%d）...", batch_size)
+    log.info("提取 patch-level 特徵中（batch_size=%d）...", batch_size)
 
     with torch.no_grad():
         for i in range(0, len(image_paths), batch_size):
@@ -85,20 +98,30 @@ def extract_features(image_paths, device="cuda", batch_size=32):
                 batch_tensors.append(transform(img))
 
             batch = torch.stack(batch_tensors).to(device)
-            features = model(batch)  # (B, 768)
-            all_features.append(features.cpu().numpy())
+
+            # 取得所有 patch tokens（不只 CLS token）
+            # forward_features 回傳 (B, num_patches+1, 768)，第 0 個是 CLS
+            x = model.forward_features(batch)
+            patch_tokens = x[:, 1:, :]  # 去掉 CLS，只留 patch tokens
+
+            # 計算 mean 和 std 作為特徵
+            patch_mean = patch_tokens.mean(dim=1)  # (B, 768)
+            patch_std = patch_tokens.std(dim=1)    # (B, 768)
+            feat = torch.cat([patch_mean, patch_std], dim=1)  # (B, 1536)
+
+            all_features.append(feat.cpu().numpy())
 
             if (i // batch_size) % 5 == 0:
                 log.info("  進度：%d / %d", min(i + batch_size, len(image_paths)), len(image_paths))
 
     features = np.concatenate(all_features, axis=0)
-    log.info("特徵提取完成，shape: %s", features.shape)
+    log.info("Patch-level 特徵 shape: %s", features.shape)
     return features
 
 
 def extract_color_features(image_paths, bins=32):
-    """提取每張圖片的 HSV 顏色直方圖特徵。"""
-    log.info("提取顏色特徵（HSV 直方圖，bins=%d）...", bins)
+    """提取 HSV 顏色直方圖特徵（96 維）。"""
+    log.info("提取顏色特徵...")
     all_hists = []
     for p in image_paths:
         img = Image.open(p).convert("HSV")
@@ -107,32 +130,124 @@ def extract_color_features(image_paths, bins=32):
         s_hist, _ = np.histogram(arr[:, :, 1], bins=bins, range=(0, 255))
         v_hist, _ = np.histogram(arr[:, :, 2], bins=bins, range=(0, 255))
         hist = np.concatenate([h_hist, s_hist, v_hist]).astype(np.float32)
-        hist = hist / (hist.sum() + 1e-8)  # L1 normalize
+        hist = hist / (hist.sum() + 1e-8)
         all_hists.append(hist)
     features = np.stack(all_hists)
-    log.info("顏色特徵 shape: %s", features.shape)  # (N, bins*3)
+    log.info("顏色特徵 shape: %s", features.shape)
     return features
 
 
-def combine_features(dino_features, color_features, color_weight=1.0):
-    """將 DINOv2 特徵與顏色特徵拼接，並用 color_weight 控制顏色影響力。
+def extract_size_features(image_paths):
+    """提取大小/面積特徵（3 維）。
 
-    DINOv2 特徵先做 L2 normalize，顏色特徵乘以 color_weight 後拼接。
-    color_weight=0 → 純 DINOv2
-    color_weight=1 → 顏色與 DINOv2 等權重
-    color_weight=3 → 顏色影響力是 DINOv2 的 3 倍
+    計算每張圖中非背景區域的：
+    - 面積比例（非黃色像素佔比）
+    - Bounding box 長寬比
+    - 非背景像素的平均亮度
     """
-    from sklearn.preprocessing import normalize
-    dino_norm = normalize(dino_features, norm='l2')
-    color_norm = normalize(color_features, norm='l2') * color_weight
-    combined = np.concatenate([dino_norm, color_norm], axis=1)
-    log.info("合併特徵 shape: %s（DINOv2=%d + 顏色=%d, weight=%.1f）",
-             combined.shape, dino_features.shape[1], color_features.shape[1], color_weight)
+    log.info("提取大小/面積特徵...")
+    all_feats = []
+    for p in image_paths:
+        img = Image.open(p).convert("HSV")
+        arr = np.array(img, dtype=np.uint8)
+        h, s, v = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
+
+        # 非黃色背景的 mask（黃色：H=20~55, S>=40, V>=80）
+        not_yellow = ~((h >= 20) & (h <= 55) & (s >= 40) & (v >= 80))
+        # 也排除黑色區域
+        not_black = v > 30
+        foreground = not_yellow & not_black
+
+        total_pixels = h.size
+        fg_ratio = foreground.sum() / (total_pixels + 1e-8)
+
+        # Bounding box 長寬比
+        rows = np.any(foreground, axis=1)
+        cols = np.any(foreground, axis=0)
+        if rows.any() and cols.any():
+            rmin, rmax = np.where(rows)[0][[0, -1]]
+            cmin, cmax = np.where(cols)[0][[0, -1]]
+            bbox_h = rmax - rmin + 1
+            bbox_w = cmax - cmin + 1
+            aspect_ratio = bbox_w / (bbox_h + 1e-8)
+        else:
+            aspect_ratio = 1.0
+
+        # 前景平均亮度
+        if foreground.any():
+            fg_brightness = v[foreground].mean() / 255.0
+        else:
+            fg_brightness = 0.0
+
+        all_feats.append([fg_ratio, aspect_ratio, fg_brightness])
+
+    features = np.array(all_feats, dtype=np.float32)
+    log.info("大小/面積特徵 shape: %s", features.shape)
+    return features
+
+
+def combine_all_features(dino_feat, color_feat, size_feat,
+                         color_weight=1.0, size_weight=1.0):
+    """合併所有特徵，各自 normalize 後加權拼接。"""
+    from sklearn.decomposition import PCA
+
+    # PCA 降維 DINOv2 特徵（1536 → 128），減少維度詛咒
+    log.info("PCA 降維 DINOv2 特徵（%d → 128）...", dino_feat.shape[1])
+    pca = PCA(n_components=128, random_state=42)
+    dino_pca = pca.fit_transform(dino_feat)
+    explained = pca.explained_variance_ratio_.sum()
+    log.info("  PCA 保留變異量：%.1f%%", explained * 100)
+
+    dino_norm = normalize(dino_pca, norm='l2')
+    color_norm = normalize(color_feat, norm='l2') * color_weight
+    size_norm = normalize(size_feat, norm='l2') * size_weight
+
+    combined = np.concatenate([dino_norm, color_norm, size_norm], axis=1)
+    log.info("合併特徵 shape: %s（DINOv2_PCA=128 + 顏色=%d×%.1f + 大小=%d×%.1f）",
+             combined.shape, color_feat.shape[1], color_weight,
+             size_feat.shape[1], size_weight)
     return combined
 
 
+# ============================================================
+# 聚類方法
+# ============================================================
+
+def run_hdbscan(features, min_cluster_size=15, min_samples=5):
+    """執行 HDBSCAN 聚類（自動決定 cluster 數量）。"""
+    import hdbscan
+
+    log.info("執行 HDBSCAN（min_cluster_size=%d, min_samples=%d）...",
+             min_cluster_size, min_samples)
+    clusterer = hdbscan.HDBSCAN(
+        min_cluster_size=min_cluster_size,
+        min_samples=min_samples,
+        metric='euclidean',
+    )
+    labels = clusterer.fit_predict(features)
+
+    n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+    n_noise = (labels == -1).sum()
+    log.info("  找到 %d 個子群，%d 個噪點", n_clusters, n_noise)
+
+    for c in sorted(set(labels)):
+        count = (labels == c).sum()
+        name = f"noise" if c == -1 else f"sub_{c}"
+        log.info("  %s: %d 張", name, count)
+
+    # 計算 Silhouette Score（排除噪點）
+    score = None
+    valid = labels >= 0
+    if valid.sum() > 1 and len(set(labels[valid])) > 1:
+        from sklearn.metrics import silhouette_score
+        score = silhouette_score(features[valid], labels[valid])
+        log.info("  Silhouette Score（排除噪點）: %.4f", score)
+
+    return labels, n_clusters, score
+
+
 def run_kmeans(features, k):
-    """執行 K-Means 聚類，並計算 Silhouette Score。"""
+    """執行 K-Means 聚類。"""
     from sklearn.metrics import silhouette_score
 
     log.info("執行 K-Means (k=%d)...", k)
@@ -149,36 +264,21 @@ def run_kmeans(features, k):
     return labels, score
 
 
-    """執行 K-Means 聚類，並計算 Silhouette Score。"""
-    from sklearn.metrics import silhouette_score
+# ============================================================
+# 結果儲存與預覽
+# ============================================================
 
-    log.info("執行 K-Means (k=%d)...", k)
-    kmeans = KMeans(n_clusters=k, random_state=42, n_init=20)
-    labels = kmeans.fit_predict(features)
-
-    # Silhouette Score：-1（最差）到 1（最好），越高代表分群越清晰
-    score = silhouette_score(features, labels)
-    log.info("  Silhouette Score: %.4f", score)
-
-    # 印出每個子群的大小
-    for c in range(k):
-        count = (labels == c).sum()
-        log.info("  sub_%d: %d 張", c, count)
-
-    return labels, score
-
-
-def save_results(image_paths, labels, k, output_dir: Path):
+def save_results(image_paths, labels, tag, output_dir: Path):
     """將圖片複製到對應的子群資料夾。"""
-    out = output_dir / f"k{k}"
+    out = output_dir / tag
     if out.exists():
         shutil.rmtree(out)
 
-    for idx, (path, label) in enumerate(zip(image_paths, labels)):
-        sub_dir = out / f"sub_{label}"
+    for path, label in zip(image_paths, labels):
+        name = "noise" if label == -1 else f"sub_{label}"
+        sub_dir = out / name
         sub_dir.mkdir(parents=True, exist_ok=True)
-        dst = sub_dir / path.name
-        shutil.copy2(path, dst)
+        shutil.copy2(path, sub_dir / path.name)
 
     log.info("結果存於 %s", out)
     return out
@@ -188,9 +288,7 @@ def make_preview(result_dir: Path, output_dir: Path, cols=10, rows=5, size=128):
     """為每個子群產生預覽圖。"""
     import random
 
-    preview_dir = output_dir
-    preview_dir.mkdir(parents=True, exist_ok=True)
-
+    output_dir.mkdir(parents=True, exist_ok=True)
     subdirs = sorted(p for p in result_dir.iterdir() if p.is_dir())
     n = cols * rows
 
@@ -203,7 +301,6 @@ def make_preview(result_dir: Path, output_dir: Path, cols=10, rows=5, size=128):
             continue
 
         selected = random.sample(tiles, min(n, len(tiles)))
-
         total_w = cols * size + (cols - 1) * 4
         total_h = rows * size + (rows - 1) * 4
         canvas = Image.new("RGB", (total_w, total_h), (50, 50, 50))
@@ -217,24 +314,111 @@ def make_preview(result_dir: Path, output_dir: Path, cols=10, rows=5, size=128):
             except Exception:
                 pass
 
-        out_path = preview_dir / f"{subdir.name}.jpg"
+        out_path = output_dir / f"{subdir.name}.jpg"
         canvas.save(out_path, quality=95)
         log.info("  預覽 → %s", out_path)
 
 
+# ============================================================
+# 主流程
+# ============================================================
+
+def extract_all_features(image_paths, args):
+    """提取並合併所有特徵。"""
+    dino_feat = extract_patch_features(image_paths, device=args.device, batch_size=args.batch_size)
+    color_feat = extract_color_features(image_paths)
+    size_feat = extract_size_features(image_paths)
+    features = combine_all_features(
+        dino_feat, color_feat, size_feat,
+        color_weight=args.color_weight,
+        size_weight=args.size_weight,
+    )
+    return features
+
+
+def process_one_cluster(cluster_dir, output_dir, args):
+    """對單一 cluster 跑子聚類。"""
+    log.info("=" * 50)
+    log.info("處理 %s", cluster_dir.name)
+    log.info("=" * 50)
+
+    image_paths = collect_images(cluster_dir)
+    features = extract_all_features(image_paths, args)
+
+    if args.method == 'hdbscan':
+        labels, n_clusters, score = run_hdbscan(
+            features,
+            min_cluster_size=args.min_cluster_size,
+            min_samples=args.min_samples,
+        )
+        tag = "hdbscan"
+        result_dir = save_results(image_paths, labels, tag, output_dir)
+
+        if args.preview:
+            make_preview(result_dir, output_dir / f"{tag}_preview",
+                         cols=args.preview_cols, rows=args.preview_rows,
+                         size=args.preview_size)
+
+        return {"method": "hdbscan", "n_clusters": n_clusters, "score": score}
+
+    else:  # kmeans
+        scores = {}
+        for k in args.k:
+            if k >= len(image_paths):
+                log.warning("  K=%d >= 圖片數 %d，跳過", k, len(image_paths))
+                continue
+            labels, score = run_kmeans(features, k)
+            scores[k] = score
+            result_dir = save_results(image_paths, labels, f"k{k}", output_dir)
+
+            if args.preview:
+                make_preview(result_dir, output_dir / f"k{k}_preview",
+                             cols=args.preview_cols, rows=args.preview_rows,
+                             size=args.preview_size)
+
+        if len(scores) > 1:
+            log.info("-" * 40)
+            log.info("%s Silhouette Score 總結：", cluster_dir.name)
+            for k, s in sorted(scores.items()):
+                marker = " ← 推薦" if s == max(scores.values()) else ""
+                log.info("  K=%d : %.4f%s", k, s, marker)
+
+        return {"method": "kmeans", "scores": scores}
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="對單一 cluster 進行子聚類",
+        description="對 cluster 進行子聚類（支援 HDBSCAN / K-Means）",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("-i", "--input", required=True, help="要子聚類的 cluster 資料夾，或用 --all 時指向包含所有 cluster_X 的父資料夾")
-    parser.add_argument("-o", "--output", default=None, help="輸出資料夾（預設：<input>_subcluster）")
-    parser.add_argument("-k", "--k", type=int, nargs="+", default=[3], help="子分群數（可指定多個，如 -k 2 3 4）")
-    parser.add_argument("--all", action="store_true", help="對 input 底下所有 cluster_X 子資料夾都跑子聚類")
+    parser.add_argument("-i", "--input", required=True,
+                        help="cluster 資料夾，或 --all 時指向包含所有 cluster_X 的父資料夾")
+    parser.add_argument("-o", "--output", default=None,
+                        help="輸出資料夾（預設：<input>_subcluster）")
+    parser.add_argument("--all", action="store_true",
+                        help="對 input 底下所有 cluster_X 子資料夾都跑")
+
+    # 聚類方法
+    parser.add_argument("--method", choices=["hdbscan", "kmeans"], default="hdbscan",
+                        help="聚類方法")
+    parser.add_argument("-k", "--k", type=int, nargs="+", default=[2, 3, 4, 5],
+                        help="K-Means 的 K 值（可多個）")
+    parser.add_argument("--min-cluster-size", type=int, default=15,
+                        help="HDBSCAN: 最小 cluster 大小")
+    parser.add_argument("--min-samples", type=int, default=5,
+                        help="HDBSCAN: 核心點最少鄰居數")
+
+    # 特徵權重
+    parser.add_argument("--color-weight", type=float, default=1.0,
+                        help="顏色特徵權重（0=不用, 1=等權重, 3=顏色主導）")
+    parser.add_argument("--size-weight", type=float, default=1.0,
+                        help="大小/面積特徵權重（0=不用, 1=等權重）")
+
+    # 裝置
     parser.add_argument("--device", default="cuda", help="計算裝置")
     parser.add_argument("--batch-size", type=int, default=32, help="特徵提取 batch size")
-    parser.add_argument("--color-weight", type=float, default=1.0,
-                        help="顏色特徵權重（0=純DINOv2, 1=等權重, 3=顏色主導）")
+
+    # 預覽
     parser.add_argument("--preview", action="store_true", help="產生預覽圖")
     parser.add_argument("--preview-cols", type=int, default=10, help="預覽圖每排張數")
     parser.add_argument("--preview-rows", type=int, default=5, help="預覽圖排數")
@@ -242,51 +426,11 @@ def parse_args():
     return parser.parse_args()
 
 
-def process_one_cluster(cluster_dir, output_dir, k_values, args):
-    """對單一 cluster 資料夾跑子聚類。"""
-    log.info("=" * 50)
-    log.info("處理 %s", cluster_dir.name)
-    log.info("=" * 50)
-
-    image_paths = collect_images(cluster_dir)
-    dino_features = extract_features(image_paths, device=args.device, batch_size=args.batch_size)
-    color_features = extract_color_features(image_paths)
-    features = combine_features(dino_features, color_features, color_weight=args.color_weight)
-
-    scores = {}
-    for k in k_values:
-        if k >= len(image_paths):
-            log.warning("  K=%d >= 圖片數 %d，跳過", k, len(image_paths))
-            continue
-        labels, score = run_kmeans(features, k)
-        scores[k] = score
-        result_dir = save_results(image_paths, labels, k, output_dir)
-
-        if args.preview:
-            preview_dir = output_dir / f"k{k}_preview"
-            make_preview(result_dir, preview_dir,
-                         cols=args.preview_cols,
-                         rows=args.preview_rows,
-                         size=args.preview_size)
-
-    if len(scores) > 1:
-        log.info("-" * 40)
-        log.info("%s Silhouette Score 總結：", cluster_dir.name)
-        for k, s in sorted(scores.items()):
-            marker = " ← 推薦" if s == max(scores.values()) else ""
-            log.info("  K=%d : %.4f%s", k, s, marker)
-        best_k = max(scores, key=scores.get)
-        log.info("建議使用 K=%d", best_k)
-
-    return scores
-
-
 if __name__ == "__main__":
     args = parse_args()
     input_dir = Path(args.input)
 
     if args.all:
-        # --all 模式：對 input 底下所有 cluster_X 子資料夾跑
         cluster_dirs = sorted(
             p for p in input_dir.iterdir()
             if p.is_dir() and p.name.startswith("cluster_")
@@ -295,54 +439,28 @@ if __name__ == "__main__":
             log.error("在 '%s' 找不到任何 cluster_X 資料夾", input_dir)
             exit(1)
 
-        log.info("找到 %d 個 cluster，開始逐一子聚類...", len(cluster_dirs))
+        log.info("找到 %d 個 cluster，方法：%s", len(cluster_dirs), args.method)
         all_results = {}
 
         for cluster_dir in cluster_dirs:
             output_dir = input_dir / f"{cluster_dir.name}_subcluster"
-            scores = process_one_cluster(cluster_dir, output_dir, args.k, args)
-            all_results[cluster_dir.name] = scores
+            result = process_one_cluster(cluster_dir, output_dir, args)
+            all_results[cluster_dir.name] = result
 
-        # 最終總結
         log.info("\n" + "=" * 60)
-        log.info("全部 cluster 子聚類結果總結")
+        log.info("全部 cluster 子聚類結果總結（%s）", args.method)
         log.info("=" * 60)
-        for name, scores in sorted(all_results.items()):
-            if scores:
-                best_k = max(scores, key=scores.get)
-                best_s = scores[best_k]
-                log.info("  %s → 建議 K=%d (score=%.4f)", name, best_k, best_s)
+        for name, result in sorted(all_results.items()):
+            if result["method"] == "hdbscan":
+                s = f"score={result['score']:.4f}" if result['score'] else "N/A"
+                log.info("  %s → %d 個子群 (%s)", name, result["n_clusters"], s)
             else:
-                log.info("  %s → 無法子聚類", name)
+                scores = result["scores"]
+                if scores:
+                    best_k = max(scores, key=scores.get)
+                    log.info("  %s → 建議 K=%d (score=%.4f)", name, best_k, scores[best_k])
     else:
-        # 單一 cluster 模式
         output_dir = Path(args.output) if args.output else input_dir.parent / f"{input_dir.name}_subcluster"
-        image_paths = collect_images(input_dir)
-        dino_features = extract_features(image_paths, device=args.device, batch_size=args.batch_size)
-        color_features = extract_color_features(image_paths)
-        features = combine_features(dino_features, color_features, color_weight=args.color_weight)
-
-        scores = {}
-        for k in args.k:
-            labels, score = run_kmeans(features, k)
-            scores[k] = score
-            result_dir = save_results(image_paths, labels, k, output_dir)
-
-            if args.preview:
-                preview_dir = output_dir / f"k{k}_preview"
-                make_preview(result_dir, preview_dir,
-                             cols=args.preview_cols,
-                             rows=args.preview_rows,
-                             size=args.preview_size)
-
-        if len(scores) > 1:
-            log.info("=" * 50)
-            log.info("Silhouette Score 總結（越高越好）：")
-            for k, s in sorted(scores.items()):
-                marker = " ← 推薦" if s == max(scores.values()) else ""
-                log.info("  K=%d : %.4f%s", k, s, marker)
-            best_k = max(scores, key=scores.get)
-            log.info("建議使用 K=%d（Silhouette Score 最高）", best_k)
-            log.info("=" * 50)
+        process_one_cluster(input_dir, output_dir, args)
 
     log.info("✅ 全部完成！")

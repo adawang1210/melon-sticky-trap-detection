@@ -27,6 +27,7 @@ pandas
 # 機器學習指標
 scikit-learn
 munkres
+hdbscan
 
 # 影像處理
 Pillow
