@@ -119,21 +119,60 @@ def extract_patch_features(image_paths, device="cuda", batch_size=32):
     return features
 
 
-def extract_color_features(image_paths, bins=32):
-    """提取 HSV 顏色直方圖特徵（96 維）。"""
-    log.info("提取顏色特徵...")
-    all_hists = []
+def extract_color_features(image_paths, bins=64):
+    """提取前景區域的 HSV 顏色特徵（排除黃色背景）。
+
+    特徵包含：
+    - 前景 HSV 直方圖（64 bins × 3 通道 = 192 維）
+    - 前景顏色統計量（mean H/S/V + std H/S/V + peak H = 7 維）
+    總共 199 維
+    """
+    log.info("提取前景顏色特徵（排除黃色背景，bins=%d）...", bins)
+    all_feats = []
     for p in image_paths:
         img = Image.open(p).convert("HSV")
         arr = np.array(img, dtype=np.uint8)
-        h_hist, _ = np.histogram(arr[:, :, 0], bins=bins, range=(0, 255))
-        s_hist, _ = np.histogram(arr[:, :, 1], bins=bins, range=(0, 255))
-        v_hist, _ = np.histogram(arr[:, :, 2], bins=bins, range=(0, 255))
+        h, s, v = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
+
+        # 前景 mask：排除黃色背景和黑色區域
+        is_yellow = (h >= 20) & (h <= 55) & (s >= 40) & (v >= 80)
+        is_black = v <= 30
+        foreground = ~is_yellow & ~is_black
+
+        if foreground.sum() < 10:
+            # 前景太少，用整張圖（避免空特徵）
+            fg_h, fg_s, fg_v = h.ravel(), s.ravel(), v.ravel()
+        else:
+            fg_h = h[foreground]
+            fg_s = s[foreground]
+            fg_v = v[foreground]
+
+        # 前景 HSV 直方圖
+        h_hist, _ = np.histogram(fg_h, bins=bins, range=(0, 255))
+        s_hist, _ = np.histogram(fg_s, bins=bins, range=(0, 255))
+        v_hist, _ = np.histogram(fg_v, bins=bins, range=(0, 255))
         hist = np.concatenate([h_hist, s_hist, v_hist]).astype(np.float32)
         hist = hist / (hist.sum() + 1e-8)
-        all_hists.append(hist)
-    features = np.stack(all_hists)
-    log.info("顏色特徵 shape: %s", features.shape)
+
+        # 前景顏色統計量
+        mean_h = fg_h.mean() / 255.0
+        mean_s = fg_s.mean() / 255.0
+        mean_v = fg_v.mean() / 255.0
+        std_h = fg_h.std() / 255.0
+        std_s = fg_s.std() / 255.0
+        std_v = fg_v.std() / 255.0
+        # 主色調：H 直方圖的 peak 位置
+        peak_h = h_hist.argmax() / bins
+
+        stats = np.array([mean_h, mean_s, mean_v, std_h, std_s, std_v, peak_h],
+                         dtype=np.float32)
+
+        feat = np.concatenate([hist, stats])
+        all_feats.append(feat)
+
+    features = np.stack(all_feats)
+    log.info("前景顏色特徵 shape: %s（直方圖=%d + 統計量=7）",
+             features.shape, bins * 3)
     return features
 
 
