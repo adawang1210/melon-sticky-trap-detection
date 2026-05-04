@@ -679,7 +679,7 @@ if __name__ == "__main__":
     if args.all:
         cluster_dirs = sorted(
             p for p in input_dir.iterdir()
-            if p.is_dir() and p.name.startswith("cluster_")
+            if p.is_dir() and p.name.startswith("cluster_") and "subcluster" not in p.name
         )
         if not cluster_dirs:
             log.error("在 '%s' 找不到任何 cluster_X 資料夾", input_dir)
