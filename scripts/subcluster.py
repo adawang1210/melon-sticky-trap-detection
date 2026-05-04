@@ -227,24 +227,49 @@ def extract_size_features(image_paths):
 
 def combine_all_features(dino_feat, color_feat, size_feat,
                          color_weight=1.0, size_weight=1.0):
-    """合併所有特徵，各自 normalize 後加權拼接。"""
+    """合併所有特徵：PCA 自動選維度（保留 95% 變異量）+ UMAP 降維。"""
     from sklearn.decomposition import PCA
 
-    # PCA 降維 DINOv2 特徵（1536 → 128），減少維度詛咒
-    log.info("PCA 降維 DINOv2 特徵（%d → 128）...", dino_feat.shape[1])
-    pca = PCA(n_components=128, random_state=42)
-    dino_pca = pca.fit_transform(dino_feat)
-    explained = pca.explained_variance_ratio_.sum()
-    log.info("  PCA 保留變異量：%.1f%%", explained * 100)
+    # PCA 降維 DINOv2 特徵，自動選擇維度（保留 95% 變異量）
+    log.info("PCA 降維 DINOv2 特徵（%d 維，保留 95%% 變異量）...", dino_feat.shape[1])
+    pca_full = PCA(random_state=42)
+    pca_full.fit(dino_feat)
+    cumsum = np.cumsum(pca_full.explained_variance_ratio_)
+    n_components = int(np.searchsorted(cumsum, 0.95) + 1)
+    n_components = max(n_components, 10)  # 至少保留 10 維
+    log.info("  自動選擇 %d 維（保留 %.1f%% 變異量）", n_components, cumsum[n_components - 1] * 100)
 
+    pca = PCA(n_components=n_components, random_state=42)
+    dino_pca = pca.fit_transform(dino_feat)
+
+    # L2 normalize 各特徵後加權拼接
     dino_norm = normalize(dino_pca, norm='l2')
     color_norm = normalize(color_feat, norm='l2') * color_weight
     size_norm = normalize(size_feat, norm='l2') * size_weight
 
     combined = np.concatenate([dino_norm, color_norm, size_norm], axis=1)
-    log.info("合併特徵 shape: %s（DINOv2_PCA=128 + 顏色=%d×%.1f + 大小=%d×%.1f）",
-             combined.shape, color_feat.shape[1], color_weight,
+    log.info("PCA 合併特徵 shape: %s（DINOv2=%d + 顏色=%d×%.1f + 大小=%d×%.1f）",
+             combined.shape, n_components, color_feat.shape[1], color_weight,
              size_feat.shape[1], size_weight)
+
+    # UMAP 降維：保留局部鄰域結構，專為聚類優化
+    try:
+        import umap
+        n_umap = min(30, combined.shape[1] - 1, combined.shape[0] - 2)
+        n_umap = max(n_umap, 2)
+        log.info("UMAP 降維（%d → %d 維）...", combined.shape[1], n_umap)
+        reducer = umap.UMAP(
+            n_components=n_umap,
+            n_neighbors=min(15, combined.shape[0] - 1),
+            min_dist=0.0,       # 聚類用途建議設 0
+            metric='cosine',    # cosine 距離更適合 normalize 後的特徵
+            random_state=42,
+        )
+        combined = reducer.fit_transform(combined)
+        log.info("UMAP 降維完成，shape: %s", combined.shape)
+    except ImportError:
+        log.warning("未安裝 umap-learn，跳過 UMAP 降維（pip install umap-learn）")
+
     return combined
 
 
@@ -274,7 +299,7 @@ def run_hdbscan(features, min_cluster_size=15, min_samples=5):
         clusterer = hdbscan.HDBSCAN(
             min_cluster_size=mcs,
             min_samples=min(min_samples, mcs),
-            metric='euclidean',
+            metric='euclidean',  # UMAP 已用 cosine 降維，這裡用 euclidean 即可
         )
         labels = clusterer.fit_predict(features)
         n_clusters = len(set(labels)) - (1 if -1 in labels else 0)

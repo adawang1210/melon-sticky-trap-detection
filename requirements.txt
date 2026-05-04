@@ -28,6 +28,7 @@ pandas
 scikit-learn
 munkres
 hdbscan
+umap-learn
 
 # 影像處理
 Pillow
