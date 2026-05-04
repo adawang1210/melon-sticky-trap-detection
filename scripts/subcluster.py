@@ -688,8 +688,14 @@ if __name__ == "__main__":
         log.info("找到 %d 個 cluster，方法：%s", len(cluster_dirs), args.method)
         all_results = {}
 
+        # 如果有指定 -o，用它作為根目錄；否則在 input 底下建立 _subcluster
+        base_output = Path(args.output) if args.output else None
+
         for cluster_dir in cluster_dirs:
-            output_dir = input_dir / f"{cluster_dir.name}_subcluster"
+            if base_output:
+                output_dir = base_output / f"{cluster_dir.name}_subcluster"
+            else:
+                output_dir = input_dir / f"{cluster_dir.name}_subcluster"
             result = process_one_cluster(cluster_dir, output_dir, args)
             all_results[cluster_dir.name] = result
 
