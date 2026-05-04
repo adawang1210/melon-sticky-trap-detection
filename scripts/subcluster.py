@@ -370,19 +370,143 @@ def run_kmeans(features, k):
     return labels, score
 
 
+def run_ensemble(features, image_paths, min_cluster_size=15, min_samples=5, n_runs=9):
+    """Ensemble Clustering：用不同參數跑多次 HDBSCAN，以共識矩陣決定最終分群。
+
+    流程：
+    1. 用不同的 min_cluster_size 和 min_samples 組合跑 n_runs 次 HDBSCAN
+    2. 建立共識矩陣（co-association matrix）：兩張圖被分到同一群的次數 / 總次數
+    3. 對共識矩陣做 Agglomerative Clustering 得到最終分群
+    4. 計算每張圖的「穩定度」：它跟同群其他圖的平均共識分數
+
+    回傳：labels, n_clusters, score, stability（每張圖的穩定度 0~1）
+    """
+    import hdbscan
+    from sklearn.cluster import AgglomerativeClustering
+    from sklearn.metrics import silhouette_score
+
+    n = len(features)
+    log.info("Ensemble Clustering（%d 次 HDBSCAN）...", n_runs)
+
+    # 產生不同的參數組合
+    mcs_values = [max(5, min_cluster_size - 10), min_cluster_size, min_cluster_size + 10]
+    ms_values = [3, 5, 7]
+    param_combos = [(mcs, ms) for mcs in mcs_values for ms in ms_values][:n_runs]
+
+    # 跑多次 HDBSCAN，收集結果
+    all_labels = []
+    for i, (mcs, ms) in enumerate(param_combos):
+        clusterer = hdbscan.HDBSCAN(
+            min_cluster_size=mcs,
+            min_samples=min(ms, mcs),
+            metric='euclidean',
+        )
+        labels = clusterer.fit_predict(features)
+        n_c = len(set(labels)) - (1 if -1 in labels else 0)
+        log.info("  第 %d 次（mcs=%d, ms=%d）→ %d 個子群", i + 1, mcs, ms, n_c)
+        all_labels.append(labels)
+
+    # 建立共識矩陣
+    log.info("建立共識矩陣...")
+    coassoc = np.zeros((n, n), dtype=np.float32)
+    count = np.zeros((n, n), dtype=np.float32)
+
+    for labels in all_labels:
+        for i in range(n):
+            for j in range(i + 1, n):
+                # 只有兩個都不是噪點時才計入
+                if labels[i] >= 0 and labels[j] >= 0:
+                    count[i, j] += 1
+                    count[j, i] += 1
+                    if labels[i] == labels[j]:
+                        coassoc[i, j] += 1
+                        coassoc[j, i] += 1
+
+    # 避免除以零
+    count[count == 0] = 1
+    coassoc = coassoc / count
+    np.fill_diagonal(coassoc, 1.0)
+
+    # 轉成距離矩陣
+    distance = 1.0 - coassoc
+
+    # 用 Agglomerative Clustering 決定最終分群
+    # 先用多個 n_clusters 試，選 silhouette 最高的
+    best_score = -1
+    best_labels = None
+    best_k = 2
+
+    # 從多次 HDBSCAN 結果中估計合理的 K 範圍
+    k_candidates = set()
+    for labels in all_labels:
+        n_c = len(set(labels)) - (1 if -1 in labels else 0)
+        if n_c >= 2:
+            k_candidates.add(n_c)
+    if not k_candidates:
+        k_candidates = {2, 3}
+    # 擴展範圍
+    k_min = max(2, min(k_candidates) - 1)
+    k_max = max(k_candidates) + 1
+
+    log.info("嘗試 K=%d~%d...", k_min, k_max)
+    for k in range(k_min, k_max + 1):
+        if k >= n:
+            continue
+        agg = AgglomerativeClustering(n_clusters=k, metric='precomputed', linkage='average')
+        labels = agg.fit_predict(distance)
+        if len(set(labels)) > 1:
+            s = silhouette_score(distance, labels, metric='precomputed')
+            log.info("  K=%d → Silhouette=%.4f", k, s)
+            if s > best_score:
+                best_score = s
+                best_labels = labels
+                best_k = k
+
+    if best_labels is None:
+        best_labels = np.zeros(n, dtype=int)
+        best_k = 1
+
+    log.info("最佳 K=%d（Silhouette=%.4f）", best_k, best_score)
+
+    # 計算每張圖的穩定度
+    stability = np.zeros(n)
+    for i in range(n):
+        same_cluster = best_labels == best_labels[i]
+        same_cluster[i] = False
+        if same_cluster.sum() > 0:
+            stability[i] = coassoc[i, same_cluster].mean()
+        else:
+            stability[i] = 1.0
+
+    n_stable = (stability >= 0.7).sum()
+    n_uncertain = ((stability >= 0.4) & (stability < 0.7)).sum()
+    n_unstable = (stability < 0.4).sum()
+    log.info("穩定度分佈：穩定=%d, 不確定=%d, 不穩定=%d", n_stable, n_uncertain, n_unstable)
+
+    for c in sorted(set(best_labels)):
+        mask = best_labels == c
+        avg_stab = stability[mask].mean()
+        log.info("  sub_%d: %d 張（平均穩定度=%.2f）", c, mask.sum(), avg_stab)
+
+    return best_labels, best_k, best_score, stability
+
+
 # ============================================================
 # 結果儲存與預覽
 # ============================================================
 
-def save_results(image_paths, labels, tag, output_dir: Path):
-    """將圖片複製到對應的子群資料夾。"""
+def save_results(image_paths, labels, tag, output_dir: Path, stability=None):
+    """將圖片複製到對應的子群資料夾。stability 不為 None 時，不穩定的圖片放到 uncertain/ 資料夾。"""
     out = output_dir / tag
     if out.exists():
         shutil.rmtree(out)
 
-    for path, label in zip(image_paths, labels):
-        name = "noise" if label == -1 else f"sub_{label}"
-        sub_dir = out / name
+    for idx, (path, label) in enumerate(zip(image_paths, labels)):
+        if stability is not None and stability[idx] < 0.4:
+            sub_dir = out / "uncertain"
+        else:
+            name = "noise" if label == -1 else f"sub_{label}"
+            sub_dir = out / name
         sub_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, sub_dir / path.name)
 
@@ -467,6 +591,22 @@ def process_one_cluster(cluster_dir, output_dir, args):
 
         return {"method": "hdbscan", "n_clusters": n_clusters, "score": score}
 
+    elif args.method == 'ensemble':
+        labels, n_clusters, score, stability = run_ensemble(
+            features, image_paths,
+            min_cluster_size=args.min_cluster_size,
+            min_samples=args.min_samples,
+        )
+        tag = "ensemble"
+        result_dir = save_results(image_paths, labels, tag, output_dir, stability=stability)
+
+        if args.preview:
+            make_preview(result_dir, output_dir / f"{tag}_preview",
+                         cols=args.preview_cols, rows=args.preview_rows,
+                         size=args.preview_size)
+
+        return {"method": "ensemble", "n_clusters": n_clusters, "score": score}
+
     else:  # kmeans
         scores = {}
         for k in args.k:
@@ -505,8 +645,8 @@ def parse_args():
                         help="對 input 底下所有 cluster_X 子資料夾都跑")
 
     # 聚類方法
-    parser.add_argument("--method", choices=["hdbscan", "kmeans"], default="hdbscan",
-                        help="聚類方法")
+    parser.add_argument("--method", choices=["hdbscan", "kmeans", "ensemble"], default="hdbscan",
+                        help="聚類方法（ensemble=多次HDBSCAN投票，最穩定）")
     parser.add_argument("-k", "--k", type=int, nargs="+", default=[2, 3, 4, 5],
                         help="K-Means 的 K 值（可多個）")
     parser.add_argument("--min-cluster-size", type=int, default=15,
@@ -557,7 +697,7 @@ if __name__ == "__main__":
         log.info("全部 cluster 子聚類結果總結（%s）", args.method)
         log.info("=" * 60)
         for name, result in sorted(all_results.items()):
-            if result["method"] == "hdbscan":
+            if result["method"] in ("hdbscan", "ensemble"):
                 s = f"score={result['score']:.4f}" if result['score'] else "N/A"
                 log.info("  %s → %d 個子群 (%s)", name, result["n_clusters"], s)
             else:
