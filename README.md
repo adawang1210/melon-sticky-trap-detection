@@ -1,5 +1,7 @@
 # 🪴 Melon Sticky Trap Detection
 
+**中文** | [English](README.en.md)
+
 基於無監督深度聚類的黃色黏蟲板昆蟲自動分群系統，應用於洋香瓜溫室害蟲監測。
 
 ---
@@ -231,8 +233,7 @@ python subcluster.py -i ../Secu-revised/output/cluster8 --all --method hdbscan -
 │   ├── secu/                  # SeCu 演算法模組
 │   │   ├── builder.py         #   SeCu 模型定義（medoid + MML）
 │   │   ├── folder.py          #   自訂 Dataset（ImageFolder / NPYFolder）
-│   │   ├── loader.py          #   資料增強（裁切、模糊、曝光反轉）
-│   │   └── optimizer.py       #   LARS 優化器
+│   │   └── loader.py          #   資料增強（裁切、模糊、曝光反轉）
 │   ├── data/                  # 影像資料（gitignored）
 │   ├── model/                 # 模型檢查點（gitignored）
 │   ├── output/                # 分群結果輸出
