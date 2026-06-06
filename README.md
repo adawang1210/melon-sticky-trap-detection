@@ -307,6 +307,38 @@ data/
 
 ---
 
+## 分群結果
+
+以下為一次完整推論的分群結果（DINOv2 backbone、`clusters_amount=8`、N=4305）。原始的每張影像 cluster 指派紀錄見 [`Secu-revised/result/植保溫室-洋香瓜.txt`](Secu-revised/result/植保溫室-洋香瓜.txt)（格式：`來源群組,cluster`）。
+
+- **總影像數**：4305
+- **來源群組數**：925（黏蟲板 / 照片 ID）
+- **分群數**：8（cluster 0–7）
+
+| cluster | 張數 | 佔比 |
+|---------|------|------|
+| 0 | 862 | 20.0% |
+| 1 | 524 | 12.2% |
+| 2 | 745 | 17.3% |
+| 3 | 329 | 7.6% |
+| 4 | 480 | 11.1% |
+| 5 | 649 | 15.1% |
+| 6 | 370 | 8.6% |
+| 7 | 346 | 8.0% |
+| **合計** | **4305** | **100%** |
+
+### 各群預覽
+
+| cluster 0 | cluster 1 | cluster 2 | cluster 3 |
+|:---:|:---:|:---:|:---:|
+| ![cluster 0](docs/images/cluster_0.jpg) | ![cluster 1](docs/images/cluster_1.jpg) | ![cluster 2](docs/images/cluster_2.jpg) | ![cluster 3](docs/images/cluster_3.jpg) |
+| **cluster 4** | **cluster 5** | **cluster 6** | **cluster 7** |
+| ![cluster 4](docs/images/cluster_4.jpg) | ![cluster 5](docs/images/cluster_5.jpg) | ![cluster 6](docs/images/cluster_6.jpg) | ![cluster 7](docs/images/cluster_7.jpg) |
+
+> 完整解析度預覽圖見 `Secu-revised/cluster8_preview/`。
+
+---
+
 ## 引用
 
 本專案的聚類演算法基於以下論文：

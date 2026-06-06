@@ -308,6 +308,38 @@ Supported formats: `.jpg`, `.jpeg`, `.png`, `.npy` (NumPy array, shape: H×W×C,
 
 ---
 
+## Clustering Results
+
+Results from one full inference run (DINOv2 backbone, `clusters_amount=8`, N=4305). The raw per-image cluster assignments are in [`Secu-revised/result/植保溫室-洋香瓜.txt`](Secu-revised/result/植保溫室-洋香瓜.txt) (format: `source_group,cluster`).
+
+- **Total images**: 4305
+- **Source groups**: 925 (sticky-trap / photo IDs)
+- **Clusters**: 8 (cluster 0–7)
+
+| Cluster | Images | Share |
+|---------|--------|-------|
+| 0 | 862 | 20.0% |
+| 1 | 524 | 12.2% |
+| 2 | 745 | 17.3% |
+| 3 | 329 | 7.6% |
+| 4 | 480 | 11.1% |
+| 5 | 649 | 15.1% |
+| 6 | 370 | 8.6% |
+| 7 | 346 | 8.0% |
+| **Total** | **4305** | **100%** |
+
+### Per-cluster previews
+
+| cluster 0 | cluster 1 | cluster 2 | cluster 3 |
+|:---:|:---:|:---:|:---:|
+| ![cluster 0](docs/images/cluster_0.jpg) | ![cluster 1](docs/images/cluster_1.jpg) | ![cluster 2](docs/images/cluster_2.jpg) | ![cluster 3](docs/images/cluster_3.jpg) |
+| **cluster 4** | **cluster 5** | **cluster 6** | **cluster 7** |
+| ![cluster 4](docs/images/cluster_4.jpg) | ![cluster 5](docs/images/cluster_5.jpg) | ![cluster 6](docs/images/cluster_6.jpg) | ![cluster 7](docs/images/cluster_7.jpg) |
+
+> Full-resolution previews are in `Secu-revised/cluster8_preview/`.
+
+---
+
 ## Citation
 
 The clustering algorithm in this project is based on the following paper:
