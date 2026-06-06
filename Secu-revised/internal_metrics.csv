@@ -1,0 +1,2 @@
+﻿tag,backbone,loss,N,clusters,silhouette_cos,silhouette_euc,davies_bouldin,calinski_harabasz
+dinov2_size-mml,dinov2,size-mml,4305,8,0.4853,0.3139,1.1325,1497.61

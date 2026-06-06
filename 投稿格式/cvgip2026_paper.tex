@@ -163,23 +163,23 @@ Our data are high-resolution photographs of yellow sticky traps collected from m
 We implement the system in PyTorch with mixed-precision training (AMP: \texttt{autocast} $+$ \texttt{GradScaler}) and DistributedDataParallel (\texttt{gloo} backend). The encoder is a frozen DINOv2 ViT-B/14-reg; the SeCu projection head is trained with AdamW for $201$ epochs at batch size $64$, base learning rate $0.01$, and a warm-up of $30$ epochs. We set the representation temperature \texttt{-{}-secu-tx}\,$=\!0.07$, the size-constraint weight \texttt{-{}-secu-alpha}\,$=\!6N/50\!\approx\!517$ for $N\!=\!4{,}305$ samples, the multi-head cluster counts \texttt{-{}-secu-k}\,$=\!8\;9\;10$, and the size lower-bound ratio \texttt{-{}-secu-lratio}\,$=\!0.7$. Medoid re-estimation (top-$90\%$) is enabled after the warm-up, and the MML term ($\varepsilon\!=\!0.8$, weight $12$) is enabled in the later training phase. At inference we set \texttt{clusters\_amount}\,$=\!8$ to read out the $K\!=\!8$ head, assign every crop to a cluster, and additionally export a 3-D t-SNE~\cite{vandermaaten2008tsne} visualization and the per-cluster distribution report. The code is released at the project repository.
 
 \subsection{Quantitative Results}
-Because the dataset has no ground-truth species labels, the partition is intrinsically unsupervised. Where reference labels are available, our inference script computes clustering ACC, NMI, and ARI under an optimal Hungarian assignment; we report these in Table~\ref{tab:metrics} as a template to be completed once a labeled validation subset is annotated. The numbers in Table~\ref{tab:metrics} are therefore marked TBD and must not be read as measured values.
+Because the dataset has no ground-truth species labels, we evaluate the partition with three \emph{internal} validation indices that require no labels: the Silhouette coefficient (higher is better), the Davies--Bouldin index (DBI, lower is better), and the Calinski--Harabasz index (CHI, higher is better). All three are computed on the 128-d L2-normalized embedding produced by the trained projection head, with Silhouette under the cosine metric to match the normalized features.\footnote{Label-dependent scores (ACC, NMI, ARI under Hungarian assignment) are omitted because no ground-truth species labels are available; our inference script computes them automatically once a labeled validation subset is annotated.} Table~\ref{tab:metrics} compares backbones and losses under these indices. Our full model (DINOv2 $+$ size-mml) attains a Silhouette of $0.485$, DBI $1.13$, and CHI $1497.6$ over the $N\!=\!4{,}305$ crops, which form eight well-separated, non-empty clusters; the remaining rows are marked TBD pending the corresponding training runs.
 
 \begin{table}[t]
 \centering
-\caption{Clustering quality across backbones and losses (ACC / NMI / ARI, \%, Hungarian assignment). To be completed on a labeled validation subset.}
+\caption{Label-free clustering quality across backbones and losses. Silhouette (cosine)~$\uparrow$, Davies--Bouldin~$\downarrow$, Calinski--Harabasz~$\uparrow$. Bold = our full model; TBD rows await the corresponding training runs.}
 \label{tab:metrics}
 \small
 \begin{tabular}{@{}llccc@{}}
 \toprule
-Backbone   & Loss      & ACC & NMI & ARI \\
+Backbone   & Loss      & Silh.\,$\uparrow$ & DBI\,$\downarrow$ & CHI\,$\uparrow$ \\
 \midrule
 ResNet-18  & size      & TBD & TBD & TBD \\
 ResNet-18  & size-mml  & TBD & TBD & TBD \\
 ViT-B      & size      & TBD & TBD & TBD \\
 ViT-B      & size-mml  & TBD & TBD & TBD \\
 DINOv2     & size      & TBD & TBD & TBD \\
-DINOv2     & size-mml  & TBD & TBD & TBD \\
+DINOv2     & size-mml (ours) & \textbf{0.485} & \textbf{1.13} & \textbf{1497.6} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -213,34 +213,34 @@ Total   & 4{,}305 & 100\% \\
 Qualitative inspection corroborates the quantitative balance. Fig.~\ref{fig:tsne} shows the 3-D t-SNE embedding of the learned representation, in which the eight clusters form distinguishable regions of the feature space. Fig.~\ref{fig:clusters} presents representative crops from each of the eight clusters in a $2\!\times\!4$ grid; insects within a cluster share a consistent morphology (body shape, color, and size), confirming that the unsupervised grouping is agronomically meaningful. Fig.~\ref{fig:subcluster} illustrates the effect of hierarchical sub-clustering: a single coarse cluster that mixed several near-identical morphologies is split into cleaner sub-groups, with low-confidence samples isolated as ``uncertain.'' Applying the sub-clustering pass across the coarse layer yields a finer organization of $4{,}020$ retained images into $17$ sub-clusters of widely varying size (from a few specimens to roughly a thousand), reflecting the natural imbalance of pest abundance on real traps.
 
 \subsection{Ablation Study}
-We design four ablations to isolate the contribution of each component. Each row reports the relative change with respect to the corresponding baseline; concrete metric values await the labeled validation subset and are marked TBD.
+We design four ablations to isolate the contribution of each component, scored with the same label-free indices as Table~\ref{tab:metrics}. Blocks (a)--(c) are evaluated on the main 128-d embedding; block (d) concerns the sub-clustering dimensionality reduction and is therefore evaluated on a single coarse cluster in a fixed PCA reference space (so the three DR variants are directly comparable), which is on a different scale from (a)--(c). The $\Delta$ column reports the relative change in Silhouette over the stated baseline; rows not yet run are marked TBD.
 
 \begin{table}[t]
 \centering
-\caption{Ablation study. $\Delta$ columns report relative improvement (\%) over the stated baseline.}
+\caption{Ablation study under label-free indices (Silhouette~$\uparrow$, DBI~$\downarrow$, CHI~$\uparrow$). $\Delta$ = relative change in Silhouette over the stated baseline. Block (d) is evaluated in a fixed sub-clustering reference space and is not comparable to (a)--(c).}
 \label{tab:ablation}
 \small
 \begin{tabular}{@{}lcccc@{}}
 \toprule
-Setting & ACC & NMI & ARI & $\Delta$ \\
+Setting & Silh.\,$\uparrow$ & DBI\,$\downarrow$ & CHI\,$\uparrow$ & $\Delta$ \\
 \midrule
 \multicolumn{5}{l}{\textit{(a) Medoid re-estimation}}\\
-Full model              & TBD & TBD & TBD & --- \\
+Full model              & \textbf{0.485} & \textbf{1.13} & \textbf{1497.6} & --- \\
 \;\; w/o medoid         & TBD & TBD & TBD & TBD\% \\
 \midrule
 \multicolumn{5}{l}{\textit{(b) Modularity loss}}\\
-Full model              & TBD & TBD & TBD & --- \\
+Full model              & \textbf{0.485} & \textbf{1.13} & \textbf{1497.6} & --- \\
 \;\; w/o MML            & TBD & TBD & TBD & TBD\% \\
 \midrule
 \multicolumn{5}{l}{\textit{(c) Backbone}}\\
 ResNet-18               & TBD & TBD & TBD & TBD\% \\
 ViT-B                   & TBD & TBD & TBD & TBD\% \\
-DINOv2 (ours)           & TBD & TBD & TBD & --- \\
+DINOv2 (ours)           & \textbf{0.485} & \textbf{1.13} & \textbf{1497.6} & --- \\
 \midrule
-\multicolumn{5}{l}{\textit{(d) Sub-clustering DR}}\\
-PCA-only                & TBD & TBD & TBD & TBD\% \\
-UMAP-only               & TBD & TBD & TBD & TBD\% \\
-PCA + UMAP (ours)       & TBD & TBD & TBD & --- \\
+\multicolumn{5}{l}{\textit{(d) Sub-clustering DR (ref.\ space)}}\\
+PCA-only                & TBD & --- & --- & TBD\% \\
+UMAP-only               & TBD & --- & --- & TBD\% \\
+PCA + UMAP (ours)       & TBD & --- & --- & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -250,7 +250,7 @@ The four axes probe, respectively: (a) whether anchoring centers on real medoids
 % =====================================================================
 \section{Discussion}
 
-The main limitation is intrinsic to purely unsupervised training: large pose variation within a single species can cause that species to split across multiple clusters, because appearance---not taxonomy---drives the grouping. Dorsal and lateral views of the same insect, or specimens partially occluded by glue or debris, may land in different clusters. The hierarchical sub-clustering stage mitigates the opposite failure (one cluster mixing species) but does not by itself merge pose-induced splits. A second limitation is that our quantitative evaluation is currently template-only: without a small labeled validation subset we can report balance and qualitative coherence but not ACC/NMI/ARI.
+The main limitation is intrinsic to purely unsupervised training: large pose variation within a single species can cause that species to split across multiple clusters, because appearance---not taxonomy---drives the grouping. Dorsal and lateral views of the same insect, or specimens partially occluded by glue or debris, may land in different clusters. The hierarchical sub-clustering stage mitigates the opposite failure (one cluster mixing species) but does not by itself merge pose-induced splits. A second limitation concerns evaluation: without ground-truth species labels we rely on label-free internal indices (Silhouette, DBI, CHI) and qualitative coherence; absolute label-dependent scores such as ACC/NMI/ARI would require a small annotated validation subset, which we leave for future work.
 
 For future work, the most promising direction is to treat the produced clusters as pseudo-labels for semi-supervised fine-tuning. An agronomist would name and, where needed, merge a handful of clusters or sub-clusters; these verified groups then supervise a lightweight classifier or detector, closing the loop from zero-label discovery to deployable, named-species monitoring at a fraction of the usual annotation cost. Pose-invariant augmentation and multi-view consolidation are natural complements to reduce species splitting.
 

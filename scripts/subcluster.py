@@ -226,11 +226,27 @@ def extract_size_features(image_paths):
 
 
 def combine_all_features(dino_feat, color_feat, size_feat,
-                         color_weight=1.0, size_weight=1.0):
-    """合併所有特徵：PCA 自動選維度（保留 95% 變異量）+ UMAP 降維。"""
+                         color_weight=1.0, size_weight=1.0, dr='pca_umap'):
+    """合併所有特徵並降維。
+
+    dr 控制降維策略（供 ablation 使用）：
+      'pca_umap'：PCA(保留95%) → 加權拼接 → UMAP(cosine)        ← 預設
+      'pca'     ：PCA(保留95%) → 加權拼接（不做 UMAP）
+      'umap'    ：原始 DINOv2 特徵 → 加權拼接 → UMAP(cosine)（不做 PCA）
+
+    回傳 (cluster_features, ref_features)：
+      cluster_features 用於實際聚類（依 dr 而不同）。
+      ref_features 為固定的「PCA(95%)+加權拼接」空間，僅用於跨 dr 變體的
+      公平 silhouette 評估，使三種 dr 在同一座標系下比較（避免 UMAP 壓縮
+      人為灌高 silhouette）。
+    """
     from sklearn.decomposition import PCA
 
+    use_pca = dr in ('pca', 'pca_umap')
+    use_umap = dr in ('umap', 'pca_umap')
+
     # PCA 降維 DINOv2 特徵，自動選擇維度（保留 95% 變異量）
+    # 注意：固定參考空間一定會用到 PCA，因此一律先算出來。
     log.info("PCA 降維 DINOv2 特徵（%d 維，保留 95%% 變異量）...", dino_feat.shape[1])
     pca_full = PCA(random_state=42)
     pca_full.fit(dino_feat)
@@ -242,35 +258,47 @@ def combine_all_features(dino_feat, color_feat, size_feat,
     pca = PCA(n_components=n_components, random_state=42)
     dino_pca = pca.fit_transform(dino_feat)
 
-    # L2 normalize 各特徵後加權拼接
-    dino_norm = normalize(dino_pca, norm='l2')
+    # 固定參考空間（PCA + 加權拼接），僅供 ablation 的公平評估
+    ref_features = np.concatenate([
+        normalize(dino_pca, norm='l2'),
+        normalize(color_feat, norm='l2') * color_weight,
+        normalize(size_feat, norm='l2') * size_weight,
+    ], axis=1)
+
+    # 聚類用特徵：依 dr 決定 DINOv2 是否經過 PCA
+    dino_reduced = dino_pca if use_pca else dino_feat
+    dino_norm = normalize(dino_reduced, norm='l2')
     color_norm = normalize(color_feat, norm='l2') * color_weight
     size_norm = normalize(size_feat, norm='l2') * size_weight
 
     combined = np.concatenate([dino_norm, color_norm, size_norm], axis=1)
-    log.info("PCA 合併特徵 shape: %s（DINOv2=%d + 顏色=%d×%.1f + 大小=%d×%.1f）",
-             combined.shape, n_components, color_feat.shape[1], color_weight,
-             size_feat.shape[1], size_weight)
+    log.info("[dr=%s] 合併特徵 shape: %s（DINOv2=%d%s + 顏色=%d×%.1f + 大小=%d×%.1f）",
+             dr, combined.shape, dino_reduced.shape[1],
+             "(PCA)" if use_pca else "(raw)",
+             color_feat.shape[1], color_weight, size_feat.shape[1], size_weight)
 
     # UMAP 降維：保留局部鄰域結構，專為聚類優化
-    try:
-        import umap
-        n_umap = min(30, combined.shape[1] - 1, combined.shape[0] - 2)
-        n_umap = max(n_umap, 2)
-        log.info("UMAP 降維（%d → %d 維）...", combined.shape[1], n_umap)
-        reducer = umap.UMAP(
-            n_components=n_umap,
-            n_neighbors=min(15, combined.shape[0] - 1),
-            min_dist=0.0,       # 聚類用途建議設 0
-            metric='cosine',    # cosine 距離更適合 normalize 後的特徵
-            random_state=42,
-        )
-        combined = reducer.fit_transform(combined)
-        log.info("UMAP 降維完成，shape: %s", combined.shape)
-    except ImportError:
-        log.warning("未安裝 umap-learn，跳過 UMAP 降維（pip install umap-learn）")
+    if use_umap:
+        try:
+            import umap
+            n_umap = min(30, combined.shape[1] - 1, combined.shape[0] - 2)
+            n_umap = max(n_umap, 2)
+            log.info("UMAP 降維（%d → %d 維, cosine, min_dist=0.0）...", combined.shape[1], n_umap)
+            reducer = umap.UMAP(
+                n_components=n_umap,
+                n_neighbors=min(15, combined.shape[0] - 1),
+                min_dist=0.0,       # 聚類用途建議設 0
+                metric='cosine',    # cosine 距離更適合 normalize 後的特徵
+                random_state=42,
+            )
+            combined = reducer.fit_transform(combined)
+            log.info("UMAP 降維完成，shape: %s", combined.shape)
+        except ImportError:
+            log.warning("未安裝 umap-learn，跳過 UMAP 降維（pip install umap-learn）")
+    else:
+        log.info("[dr=%s] 跳過 UMAP", dr)
 
-    return combined
+    return combined, ref_features
 
 
 # ============================================================
@@ -554,16 +582,50 @@ def make_preview(result_dir: Path, output_dir: Path, cols=10, rows=5, size=128):
 # ============================================================
 
 def extract_all_features(image_paths, args):
-    """提取並合併所有特徵。"""
+    """提取並合併所有特徵。回傳 (cluster_features, ref_features)。"""
     dino_feat = extract_patch_features(image_paths, device=args.device, batch_size=args.batch_size)
     color_feat = extract_color_features(image_paths)
     size_feat = extract_size_features(image_paths)
-    features = combine_all_features(
+    features, ref_features = combine_all_features(
         dino_feat, color_feat, size_feat,
         color_weight=args.color_weight,
         size_weight=args.size_weight,
+        dr=args.dr,
     )
-    return features
+    return features, ref_features
+
+
+def ref_silhouette(ref_features, labels):
+    """在固定參考空間計算 silhouette，供跨 dr 變體公平比較（噪點不計入）。"""
+    from sklearn.metrics import silhouette_score
+
+    labels = np.asarray(labels)
+    valid = labels >= 0
+    if len(set(labels[valid].tolist())) < 2:
+        return None
+    return float(silhouette_score(ref_features[valid], labels[valid]))
+
+
+def append_dr_metric(csv_path, cluster_name, dr, method, n_clusters,
+                     cluster_score, ref_score):
+    """把一列 DR ablation 結果 append 進 CSV（供論文 Table 3 區塊 (d)）。"""
+    import csv as _csv
+    import os as _os
+
+    header = ["cluster", "dr", "method", "n_clusters",
+              "silhouette_cluster_space", "silhouette_ref_space"]
+    row = [cluster_name, dr, method, n_clusters,
+           f"{cluster_score:.4f}" if cluster_score is not None else "",
+           f"{ref_score:.4f}" if ref_score is not None else ""]
+    write_header = not _os.path.exists(csv_path)
+    with open(csv_path, "a", newline="", encoding="utf-8-sig") as f:
+        w = _csv.writer(f)
+        if write_header:
+            w.writerow(header)
+        w.writerow(row)
+    log.info("[dr-metric] %s | dr=%s | method=%s | ref-silhouette=%s → %s",
+             cluster_name, dr, method,
+             f"{ref_score:.4f}" if ref_score is not None else "N/A", csv_path)
 
 
 def process_one_cluster(cluster_dir, output_dir, args):
@@ -573,7 +635,7 @@ def process_one_cluster(cluster_dir, output_dir, args):
     log.info("=" * 50)
 
     image_paths = collect_images(cluster_dir)
-    features = extract_all_features(image_paths, args)
+    features, ref_features = extract_all_features(image_paths, args)
 
     if args.method == 'hdbscan':
         labels, n_clusters, score = run_hdbscan(
@@ -583,6 +645,9 @@ def process_one_cluster(cluster_dir, output_dir, args):
         )
         tag = "hdbscan"
         result_dir = save_results(image_paths, labels, tag, output_dir)
+        if args.metrics_csv:
+            append_dr_metric(args.metrics_csv, cluster_dir.name, args.dr, "hdbscan",
+                             n_clusters, score, ref_silhouette(ref_features, labels))
 
         if args.preview:
             make_preview(result_dir, output_dir / f"{tag}_preview",
@@ -599,6 +664,9 @@ def process_one_cluster(cluster_dir, output_dir, args):
         )
         tag = "ensemble"
         result_dir = save_results(image_paths, labels, tag, output_dir, stability=stability)
+        if args.metrics_csv:
+            append_dr_metric(args.metrics_csv, cluster_dir.name, args.dr, "ensemble",
+                             n_clusters, score, ref_silhouette(ref_features, labels))
 
         if args.preview:
             make_preview(result_dir, output_dir / f"{tag}_preview",
@@ -616,6 +684,9 @@ def process_one_cluster(cluster_dir, output_dir, args):
             labels, score = run_kmeans(features, k)
             scores[k] = score
             result_dir = save_results(image_paths, labels, f"k{k}", output_dir)
+            if args.metrics_csv:
+                append_dr_metric(args.metrics_csv, cluster_dir.name, args.dr, f"kmeans_k{k}",
+                                 k, score, ref_silhouette(ref_features, labels))
 
             if args.preview:
                 make_preview(result_dir, output_dir / f"k{k}_preview",
@@ -659,6 +730,13 @@ def parse_args():
                         help="顏色特徵權重（0=不用, 1=等權重, 3=顏色主導）")
     parser.add_argument("--size-weight", type=float, default=1.0,
                         help="大小/面積特徵權重（0=不用, 1=等權重）")
+
+    # 降維策略（ablation 用）
+    parser.add_argument("--dr", choices=["pca", "umap", "pca_umap"], default="pca_umap",
+                        help="降維策略：pca_umap（預設）/ pca（不做UMAP）/ umap（不做PCA）")
+    parser.add_argument("--metrics-csv", default=None,
+                        help="若指定，將每個 cluster 的 DR ablation silhouette append 進此 CSV "
+                             "（在固定 PCA 參考空間評估，跨 dr 公平可比）")
 
     # 裝置
     parser.add_argument("--device", default="cuda", help="計算裝置")
