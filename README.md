@@ -12,6 +12,7 @@
 - **三種骨幹支援**：ResNet-18、ViT (vit_base_patch16_224)、DINOv2 (vit_base_patch14_reg4_dinov2)
 - **完整前處理流程**：從原始黏蟲板照片到可訓練的圖塊資料，提供角落遮蔽、邊框裁切、圖塊切割、自適應裁切等工具
 - **聚類評估與視覺化**：輸出 t-SNE 3D 視覺化與聚類分佈 CSV 報告；若提供 Ground Truth 標籤可額外計算 ACC / NMI / ARI
+- **子聚類細分**：對單一 cluster 做二次細分，結合 DINOv2 patch-level 特徵、前景 HSV 顏色直方圖與大小/面積特徵，經 PCA + UMAP 降維後以 HDBSCAN / K-Means / Ensemble（多次投票共識）聚類，並標記每張影像的穩定度
 - **混合精度訓練**：使用 PyTorch AMP (autocast + GradScaler) 加速訓練
 - **TensorBoard 監控**：即時追蹤 loss、各群大小等訓練指標
 
@@ -24,8 +25,9 @@
 | 語言 | Python 3.8+ |
 | 深度學習框架 | PyTorch >= 1.6、torchvision、timm |
 | 分散式訓練 | DistributedDataParallel (DDP)、gloo backend |
-| 優化器 | SGD (ResNet) / AdamW (ViT / DINOv2) / LARS (自訂) |
-| 評估指標 | scikit-learn (NMI, ARI)、scipy (Hungarian ACC) |
+| 優化器 | SGD (ResNet) / AdamW (ViT / DINOv2) |
+| 評估指標 | scikit-learn (NMI, ARI)、scipy (Hungarian ACC)、munkres |
+| 子聚類與降維 | HDBSCAN、UMAP (umap-learn)、scikit-learn (K-Means / Agglomerative / PCA) |
 | 影像處理 | Pillow、NumPy、OpenCV |
 | 視覺化 | matplotlib (t-SNE)、TensorBoard |
 | 資料格式 | `.jpg` / `.png` / `.npy` (NumPy array) |
@@ -53,7 +55,7 @@ pip install -r requirements.txt
 
 ## 操作流程
 
-整體流程分為四個階段：**影像前處理** → **模型訓練** → **推論與分群** → **結果預覽**。
+整體流程分為五個階段：**影像前處理** → **模型訓練** → **推論與分群** → **結果預覽** → **子聚類細分**（選用）。
 
 > **注意**：本系統為無監督聚類，輸入資料不需要標籤。訓練與推論使用同一批資料 — 訓練階段學習特徵表示與群中心，推論階段將每張影像分配到對應的 cluster。
 
@@ -149,6 +151,56 @@ python ..\scripts\preview.py -i .\output\cluster9 -o .\cluster9_preview --cols 1
 | `--size` | 每張圖的顯示大小（px） |
 | `-n` | 每個 cluster 最多抽幾張（預設 100） |
 
+### 階段五：子聚類細分（選用）
+
+推論得到的每個 cluster 內，可能還混雜了形態相近但實際不同的昆蟲。`scripts/subcluster.py` 可對單一 cluster（或一次處理整層）做二次細分。它結合三種特徵：
+
+- **DINOv2 patch-level 特徵**：patch tokens 的 mean + std（1536 維），經 PCA 自動保留 95% 變異量
+- **前景 HSV 顏色直方圖**：64 bins × 3 通道 + 顏色統計量（199 維），自動排除黃色背景
+- **大小/面積特徵**：前景佔比、bounding box 長寬比、前景平均亮度（3 維）
+
+三者 L2-normalize 加權拼接後以 **UMAP（cosine）** 降維，再用以下任一方法聚類。從 `scripts/` 目錄執行：
+
+```bash
+# HDBSCAN：自動決定子群數（推薦），噪點自動併入最近子群
+python subcluster.py -i ../Secu-revised/output/cluster8/cluster_0 --method hdbscan --preview
+
+# Ensemble：用不同參數跑多次 HDBSCAN，以共識矩陣決定最終分群，最穩定
+#           並標記每張圖的穩定度（不穩定者另放 uncertain/）
+python subcluster.py -i ../Secu-revised/output/cluster8/cluster_0 --method ensemble --preview
+
+# K-Means：手動指定 K（可多個，依 Silhouette Score 比較哪個 K 最好）
+python subcluster.py -i ../Secu-revised/output/cluster8/cluster_0 --method kmeans -k 2 3 4 5 --preview
+
+# --all：一次處理某層底下所有 cluster_X 子資料夾（自動排除 _subcluster），
+#        並用 -o 指定統一輸出根目錄
+python subcluster.py -i ../Secu-revised/output/cluster8 --all --method hdbscan --preview -o ../final_result
+```
+
+| 參數 | 說明 |
+|------|------|
+| `--method` | `hdbscan`（自動 K）/ `ensemble`（多次投票最穩）/ `kmeans`（手動 K） |
+| `--all` | 對 input 底下所有 `cluster_X` 子資料夾各跑一次（自動排除含 `subcluster` 的資料夾） |
+| `-o` | 輸出根目錄（預設 `<input>_subcluster`） |
+| `-k` | K-Means 的 K 值（可多個） |
+| `--min-cluster-size` / `--min-samples` | HDBSCAN 參數（子群不足時會自動降低重試，最終 fallback 到 K-Means k=2） |
+| `--color-weight` / `--size-weight` | 顏色 / 大小特徵權重（0=不用、1=等權重、>1=主導） |
+| `--preview` | 為每個子群輸出網格預覽圖（`--preview-cols/-rows/-size` 可調） |
+
+輸出結構（以 HDBSCAN 為例）：
+
+```
+<input>_subcluster/
+├── hdbscan/              # 或 k3/、ensemble/
+│   ├── sub_0/
+│   ├── sub_1/
+│   ├── noise/            # HDBSCAN 噪點（已併入最近子群時可能為空）
+│   └── uncertain/        # 僅 ensemble：穩定度 < 0.4 的影像
+└── hdbscan_preview/      # --preview 時產生的各子群預覽圖
+```
+
+> 子聚類完全使用 **frozen（預訓練、不微調）** 的 DINOv2，不需要重新訓練模型，可直接對 SeCu 分群結果做後處理。
+
 ---
 
 ## 輔助工具
@@ -157,6 +209,7 @@ python ..\scripts\preview.py -i .\output\cluster9 -o .\cluster9_preview --cols 1
 |------|------|------|
 | `scripts/count_image.py` | 統計各子資料夾的圖片數量 | `python count_image.py ../Secu-revised/data/train` |
 | `scripts/preview.py` | 將子資料夾圖片排成網格預覽圖 | `python preview.py -i ../output/cluster9` |
+| `scripts/subcluster.py` | 對單一 cluster 做子聚類細分（HDBSCAN / K-Means / Ensemble） | `python subcluster.py -i ../Secu-revised/output/cluster8/cluster_0 --method hdbscan --preview` |
 | `Secu-revised/count_parcel.py` | 資料集抽樣與標籤產生 | 詳見腳本內說明 |
 
 ---
@@ -190,7 +243,8 @@ python ..\scripts\preview.py -i .\output\cluster9 -o .\cluster9_preview --cols 1
 │   ├── crop_border.py         #   裁切圖片四邊邊框
 │   ├── adaptive_tile.py       #   自適應偵測非黃色區域並裁切
 │   ├── count_image.py         #   統計各子資料夾圖片數量
-│   └── preview.py             #   子資料夾圖片網格預覽
+│   ├── preview.py             #   子資料夾圖片網格預覽
+│   └── subcluster.py          #   cluster 子聚類細分（DINOv2+HSV+UMAP，HDBSCAN/K-Means/Ensemble）
 │
 ├── requirements.txt           # Python 套件依賴
 └── README.md

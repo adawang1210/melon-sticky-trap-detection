@@ -42,14 +42,23 @@ desktop.ini
 # Training data & model weights
 Secu-revised/data/
 Secu-revised/model/
+Secu-revised/supervised/
 
-# Image datasets & outputs (large binary files)
+# Image datasets & pre-processing outputs (large binary files)
 Bugdatasets/
 adaptive_output/
-cluster_previews*/
 cropped_border/
 masked_output/
 tiles_output/
+
+# Clustering / inference / sub-clustering outputs (large binary files)
+output/
+Secu-revised/output/
+cluster_previews*/
+*_preview/
+*_subcluster/
+final_result/
+final_result_montage/
 
 # Model weights & checkpoints
 *.pt

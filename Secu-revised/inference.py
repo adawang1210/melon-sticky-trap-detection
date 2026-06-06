@@ -795,11 +795,6 @@ def main():
         elif args.data_name == 'custom':
             from nets.resnet_custom import resnet18
             base_encoder = resnet18
-        elif args.data_name == 'custom-texture':
-            from nets.resnet_texture import HybridEncoder
-            print('using texture!!')
-            def base_encoder(**kwargs):
-                return HybridEncoder(in_channels=args.bands)
 
     elif args.backbone == 'vit':
         from nets.vit import ViT
