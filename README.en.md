@@ -377,6 +377,20 @@ Results from one full inference run (DINOv2 backbone, `clusters_amount=8`, N=430
 
 The final sub-clusters produced by Stage 5. Each image is a tightly-packed montage of that sub-cluster's images (up to the first 200), for **17 sub-clusters** in total (sub_2, sub_7 and sub_17 missing; the former sub_7 was merged into sub_6).
 
+**Image count per sub-cluster** (4020 images total):
+
+| Sub-cluster | Images | Share | Sub-cluster | Images | Share |
+|-------------|-------:|------:|-------------|-------:|------:|
+| sub_0 | 392 | 9.8% | sub_11 | 76 | 1.9% |
+| sub_1 | 63 | 1.6% | sub_12 | 126 | 3.1% |
+| sub_3 | 47 | 1.2% | sub_13 | 143 | 3.6% |
+| sub_4 | 19 | 0.5% | sub_14 | 578 | 14.4% |
+| sub_5 | 134 | 3.3% | sub_15 | 137 | 3.4% |
+| sub_6 (incl. former sub_7) | 575 | 14.3% | sub_16 | 179 | 4.5% |
+| sub_8 | 72 | 1.8% | sub_18 | 197 | 4.9% |
+| sub_9 | 261 | 6.5% | sub_19 | 7 | 0.2% |
+| sub_10 | 1014 | 25.2% | **Total** | **4020** | **100%** |
+
 | sub_0 | sub_1 | sub_3 | sub_4 |
 |:---:|:---:|:---:|:---:|
 | ![sub_0](docs/images/sub_montages/sub_0.jpg) | ![sub_1](docs/images/sub_montages/sub_1.jpg) | ![sub_3](docs/images/sub_montages/sub_3.jpg) | ![sub_4](docs/images/sub_montages/sub_4.jpg) |
