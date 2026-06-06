@@ -375,7 +375,7 @@ Results from one full inference run (DINOv2 backbone, `clusters_amount=8`, N=430
 
 ### Final sub-clustering results (final_result)
 
-The final sub-clusters produced by Stage 5. Each image is a tightly-packed montage of that sub-cluster's images (up to the first 200), for **19 sub-clusters** in total (sub_17 missing).
+The final sub-clusters produced by Stage 5. Each image is a tightly-packed montage of that sub-cluster's images (up to the first 200), for **18 sub-clusters** in total (sub_7 and sub_17 missing; the former sub_7 was merged into sub_6).
 
 | sub_0 | sub_1 |
 |:---:|:---:|
@@ -384,20 +384,18 @@ The final sub-clusters produced by Stage 5. Each image is a tightly-packed monta
 | ![sub_2](docs/images/sub_montages/sub_2.jpg) | ![sub_3](docs/images/sub_montages/sub_3.jpg) |
 | **sub_4** | **sub_5** |
 | ![sub_4](docs/images/sub_montages/sub_4.jpg) | ![sub_5](docs/images/sub_montages/sub_5.jpg) |
-| **sub_6** | **sub_7** |
-| ![sub_6](docs/images/sub_montages/sub_6.jpg) | ![sub_7](docs/images/sub_montages/sub_7.jpg) |
-| **sub_8** | **sub_9** |
-| ![sub_8](docs/images/sub_montages/sub_8.jpg) | ![sub_9](docs/images/sub_montages/sub_9.jpg) |
-| **sub_10** | **sub_11** |
-| ![sub_10](docs/images/sub_montages/sub_10.jpg) | ![sub_11](docs/images/sub_montages/sub_11.jpg) |
-| **sub_12** | **sub_13** |
-| ![sub_12](docs/images/sub_montages/sub_12.jpg) | ![sub_13](docs/images/sub_montages/sub_13.jpg) |
-| **sub_14** | **sub_15** |
-| ![sub_14](docs/images/sub_montages/sub_14.jpg) | ![sub_15](docs/images/sub_montages/sub_15.jpg) |
-| **sub_16** | **sub_18** |
-| ![sub_16](docs/images/sub_montages/sub_16.jpg) | ![sub_18](docs/images/sub_montages/sub_18.jpg) |
-| **sub_19** |  |
-| ![sub_19](docs/images/sub_montages/sub_19.jpg) |  |
+| **sub_6** (incl. former sub_7) | **sub_8** |
+| ![sub_6](docs/images/sub_montages/sub_6.jpg) | ![sub_8](docs/images/sub_montages/sub_8.jpg) |
+| **sub_9** | **sub_10** |
+| ![sub_9](docs/images/sub_montages/sub_9.jpg) | ![sub_10](docs/images/sub_montages/sub_10.jpg) |
+| **sub_11** | **sub_12** |
+| ![sub_11](docs/images/sub_montages/sub_11.jpg) | ![sub_12](docs/images/sub_montages/sub_12.jpg) |
+| **sub_13** | **sub_14** |
+| ![sub_13](docs/images/sub_montages/sub_13.jpg) | ![sub_14](docs/images/sub_montages/sub_14.jpg) |
+| **sub_15** | **sub_16** |
+| ![sub_15](docs/images/sub_montages/sub_15.jpg) | ![sub_16](docs/images/sub_montages/sub_16.jpg) |
+| **sub_18** | **sub_19** |
+| ![sub_18](docs/images/sub_montages/sub_18.jpg) | ![sub_19](docs/images/sub_montages/sub_19.jpg) |
 
 ---
 
