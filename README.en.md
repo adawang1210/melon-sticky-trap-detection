@@ -101,6 +101,41 @@ flowchart TD
 
 ### Stage 1: Image preprocessing
 
+#### Raw data examples
+
+Below are the original sticky-trap photos handed over at project kick-off: high-resolution, mostly yellow background, insects stuck to the board, with grey borders on all four sides and punched holes near the right edge.
+
+<p align="center">
+  <img src="docs/images/raw_sticky_trap_1.png" alt="Raw sticky-trap photo 1" width="48%" />
+  &nbsp;&nbsp;
+  <img src="docs/images/raw_sticky_trap_2.png" alt="Raw sticky-trap photo 2" width="48%" />
+</p>
+
+#### Adaptive tiling
+
+`crop_border.py` and `crop_corners.py` only clean up the full-board photo — they don't produce model-ready crops. `adaptive_tile.py` does that step: it scans the cleaned image with small probe tiles, finds tiles that are not pure yellow (likely insects), and grows them outward until surrounded by yellow again. Steps:
+
+1. **Probe scan**: walk the full image with non-overlapping tiles of size `--probe` (default 32 px)
+2. **Foreground detection**: for each tile, compute the share of yellow + black pixels; tiles below `--yellow-threshold` (default 0.85) are kept as candidates
+3. **Merging**: adjacent or overlapping candidate tiles are merged into a single bounding box, so one insect is not split across crops
+4. **Padded crop**: each bounding box is expanded by `--padding` (default 20 px) and saved as an individual JPEG
+
+| Key flags | Default | Meaning |
+|---|---|---|
+| `--probe` | `32` | Probe tile size in px — smaller is finer but slower |
+| `--padding` | `20` | Pixels added around each detected bounding box |
+| `--yellow-threshold` | `0.85` | Tiles whose background ratio exceeds this are treated as pure background |
+| `--preview` | — | Emits a downscaled (max 2048 px) preview with red boxes drawn |
+| `--dry-run` | — | Prints statistics without writing crops; useful for tuning |
+
+> Yellow is defined in HSV as `H ∈ [30, 55]`, `S ≥ 40`, `V ≥ 80`; black is `V ≤ 30`. Both count as background, which is why running `crop_corners.py` first to blacken the punch holes prevents them from being mistaken for insects.
+
+<p align="center">
+  <img src="docs/images/adaptive_tile_diagram.png" alt="Adaptive tiling pipeline diagram" width="90%" />
+</p>
+
+#### Run order
+
 All preprocessing scripts live in `scripts/`; run them from that directory:
 
 ```bash

@@ -101,6 +101,18 @@ flowchart TD
 
 ### 階段一：影像前處理
 
+#### 原始資料範例
+
+下方為任務拿到的原始黏蟲板照片：高解析度、整片偏黃、可見昆蟲附著於板面，四周帶灰色邊框、右側有打洞處。
+
+<p align="center">
+  <img src="docs/images/raw_sticky_trap_1.png" alt="原始黏蟲板照片 1" width="48%" />
+  &nbsp;&nbsp;
+  <img src="docs/images/raw_sticky_trap_2.png" alt="原始黏蟲板照片 2" width="48%" />
+</p>
+
+#### 待解決的問題與處理方式
+
 原始黏蟲板照片有兩個主要問題會影響後續切片與聚類，前處理依序解決：
 
 | 問題 | 解決方式 | 對應腳本 |
@@ -113,6 +125,31 @@ flowchart TD
   &nbsp;&nbsp;
   <img src="docs/images/preprocess_corners.png" alt="遮蔽打洞處" width="48%" />
 </p>
+
+#### 自適應切割（Adaptive Tiling）
+
+`crop_border.py` 與 `crop_corners.py` 處理完後得到的仍是整張黏蟲板大圖，無法直接餵進聚類模型。`adaptive_tile.py` 進一步把每隻昆蟲所在的小區塊裁出來，原理是「用小格子掃整張圖，找到非黃色（疑似昆蟲）的格子後，往外擴張到四周都是黃色為止」。流程如下：
+
+1. **小格子掃描**：以 `--probe`（預設 32 px）為邊長的格子等距遍歷整張大圖
+2. **判定疑似目標**：每格計算「黃色 + 黑色」像素比例，低於 `--yellow-threshold`（預設 0.85）即視為非背景，可能有蟲
+3. **格子合併**：相鄰或重疊的疑似格子合併成同一個 bounding box（避免一隻蟲被切成多塊）
+4. **加邊距裁出**：每個 bounding box 外擴 `--padding`（預設 20 px）後存成獨立小圖
+
+| 主要參數 | 預設 | 說明 |
+|---|---|---|
+| `--probe` | `32` | 探測格子大小（px），越小越精細但越慢 |
+| `--padding` | `20` | bounding box 外擴的邊距（px） |
+| `--yellow-threshold` | `0.85` | 格子內背景像素比例上限，超過視為純背景 |
+| `--preview` | — | 額外輸出標記紅框的預覽圖（縮小到 2048 px） |
+| `--dry-run` | — | 只印統計、不寫檔（用於試參數） |
+
+> 黃色判定使用 HSV：`H ∈ [30, 55]`、`S ≥ 40`、`V ≥ 80`；黑色則為 `V ≤ 30`。兩者都當作背景，因此先用 `crop_corners.py` 把打洞處塗黑後，這裡就不會被當成蟲。
+
+<p align="center">
+  <img src="docs/images/adaptive_tile_diagram.png" alt="自適應切割流程示意圖" width="90%" />
+</p>
+
+#### 執行指令
 
 所有前處理腳本位於 `scripts/` 目錄，從 `scripts/` 目錄執行：
 
