@@ -101,13 +101,26 @@ flowchart TD
 
 ### 階段一：影像前處理
 
+原始黏蟲板照片有兩個主要問題會影響後續切片與聚類，前處理依序解決：
+
+| 問題 | 解決方式 | 對應腳本 |
+|---|---|---|
+| **原始圖片有灰色邊框**：邊框區域不是有效的黃色黏蟲板，會干擾自適應切割 | 將四邊的灰色邊框去掉，留下純黃色黏蟲板區域 | `crop_border.py` |
+| **黏蟲板上的打洞處會被誤判為昆蟲**：自適應切割是以「非黃色區域」當作昆蟲，打洞處的白色也會被切下來 | 把右上角與右下角各 3000×3000 px 的打洞區域塗黑，讓自適應切割略過 | `crop_corners.py` |
+
+<p align="center">
+  <img src="docs/images/preprocess_border.png" alt="去除灰色邊框" width="48%" />
+  &nbsp;&nbsp;
+  <img src="docs/images/preprocess_corners.png" alt="遮蔽打洞處" width="48%" />
+</p>
+
 所有前處理腳本位於 `scripts/` 目錄，從 `scripts/` 目錄執行：
 
 ```bash
-# 1. 遮蔽角落無關區域（如相機時間戳）
+# 1. 遮蔽角落打洞處
 python crop_corners.py -i ../Bugdatasets -o ../masked_output --size 3000
 
-# 2. 裁切圖片四邊邊框
+# 2. 裁切圖片四邊灰色邊框
 python crop_border.py -i ../masked_output -o ../cropped_border --all 100
 
 # 3. 自適應切割（自動偵測非黃色區域並裁切）
