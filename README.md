@@ -254,6 +254,14 @@ python subcluster.py -i ../Secu-revised/output/cluster8 --all --method hdbscan -
 
 > 子聚類完全使用 **frozen（預訓練、不微調）** 的 DINOv2，不需要重新訓練模型，可直接對 SeCu 分群結果做後處理。
 
+#### 子聚類效果範例
+
+下圖示範對某個第一階段 cluster 進行 HDBSCAN 子聚類後的結果，可看到原本混雜在同一群的影像被進一步細分成幾個更純淨的子群：
+
+<p align="center">
+  <img src="docs/images/subcluster_example.png" alt="子聚類效果範例" width="90%" />
+</p>
+
 ---
 
 ## 輔助工具
