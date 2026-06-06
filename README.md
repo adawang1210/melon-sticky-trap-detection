@@ -397,27 +397,19 @@ data/
 
 ### 子聚類最終結果（final_result）
 
-階段五對各群再細分後的最終子群，每張為該子群影像（最多前 200 張）的緊密拼貼預覽，共 **18 個子群**（缺 sub_7、sub_17；原 sub_7 已併入 sub_6）。
+階段五對各群再細分後的最終子群，每張為該子群影像（最多前 200 張）的緊密拼貼預覽，共 **17 個子群**（缺 sub_2、sub_7、sub_17；原 sub_7 已併入 sub_6）。
 
-| sub_0 | sub_1 |
-|:---:|:---:|
-| ![sub_0](docs/images/sub_montages/sub_0.jpg) | ![sub_1](docs/images/sub_montages/sub_1.jpg) |
-| **sub_2** | **sub_3** |
-| ![sub_2](docs/images/sub_montages/sub_2.jpg) | ![sub_3](docs/images/sub_montages/sub_3.jpg) |
-| **sub_4** | **sub_5** |
-| ![sub_4](docs/images/sub_montages/sub_4.jpg) | ![sub_5](docs/images/sub_montages/sub_5.jpg) |
-| **sub_6**（含原 sub_7） | **sub_8** |
-| ![sub_6](docs/images/sub_montages/sub_6.jpg) | ![sub_8](docs/images/sub_montages/sub_8.jpg) |
-| **sub_9** | **sub_10** |
-| ![sub_9](docs/images/sub_montages/sub_9.jpg) | ![sub_10](docs/images/sub_montages/sub_10.jpg) |
-| **sub_11** | **sub_12** |
-| ![sub_11](docs/images/sub_montages/sub_11.jpg) | ![sub_12](docs/images/sub_montages/sub_12.jpg) |
-| **sub_13** | **sub_14** |
-| ![sub_13](docs/images/sub_montages/sub_13.jpg) | ![sub_14](docs/images/sub_montages/sub_14.jpg) |
-| **sub_15** | **sub_16** |
-| ![sub_15](docs/images/sub_montages/sub_15.jpg) | ![sub_16](docs/images/sub_montages/sub_16.jpg) |
-| **sub_18** | **sub_19** |
-| ![sub_18](docs/images/sub_montages/sub_18.jpg) | ![sub_19](docs/images/sub_montages/sub_19.jpg) |
+| sub_0 | sub_1 | sub_3 | sub_4 |
+|:---:|:---:|:---:|:---:|
+| ![sub_0](docs/images/sub_montages/sub_0.jpg) | ![sub_1](docs/images/sub_montages/sub_1.jpg) | ![sub_3](docs/images/sub_montages/sub_3.jpg) | ![sub_4](docs/images/sub_montages/sub_4.jpg) |
+| **sub_5** | **sub_6**（含原 sub_7） | **sub_8** | **sub_9** |
+| ![sub_5](docs/images/sub_montages/sub_5.jpg) | ![sub_6](docs/images/sub_montages/sub_6.jpg) | ![sub_8](docs/images/sub_montages/sub_8.jpg) | ![sub_9](docs/images/sub_montages/sub_9.jpg) |
+| **sub_10** | **sub_11** | **sub_12** | **sub_13** |
+| ![sub_10](docs/images/sub_montages/sub_10.jpg) | ![sub_11](docs/images/sub_montages/sub_11.jpg) | ![sub_12](docs/images/sub_montages/sub_12.jpg) | ![sub_13](docs/images/sub_montages/sub_13.jpg) |
+| **sub_14** | **sub_15** | **sub_16** | **sub_18** |
+| ![sub_14](docs/images/sub_montages/sub_14.jpg) | ![sub_15](docs/images/sub_montages/sub_15.jpg) | ![sub_16](docs/images/sub_montages/sub_16.jpg) | ![sub_18](docs/images/sub_montages/sub_18.jpg) |
+| **sub_19** |  |  |  |
+| ![sub_19](docs/images/sub_montages/sub_19.jpg) |  |  |  |
 
 ---
 
