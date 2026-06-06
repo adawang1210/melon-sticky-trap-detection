@@ -59,6 +59,44 @@ pip install -r requirements.txt
 
 整體流程分為五個階段：**影像前處理** → **模型訓練** → **推論與分群** → **結果預覽** → **子聚類細分**（選用）。
 
+```mermaid
+flowchart TD
+    A[原始黏蟲板照片<br/>Bugdatasets/] --> B
+
+    subgraph S1[階段一：影像前處理]
+        B[crop_corners.py<br/>遮蔽角落] --> C[crop_border.py<br/>裁切邊框] --> D[adaptive_tile.py<br/>自適應切割]
+    end
+
+    D --> E[(可訓練圖塊<br/>adaptive_output/)]
+
+    subgraph S2[階段二：模型訓練]
+        F[main.py<br/>DINOv2 / ViT / ResNet<br/>SeCu + Medoid + MML]
+    end
+
+    E --> F --> G[(最佳模型<br/>best_model.pth.tar)]
+
+    subgraph S3[階段三：推論與分群]
+        H[inference.py<br/>分配 cluster]
+    end
+
+    E --> H
+    G --> H
+    H --> I[(分群結果<br/>output/clusterN/cluster_X/)]
+    H --> J[聚類分佈 CSV<br/>+ t-SNE 3D<br/>+ ACC / NMI / ARI]
+
+    subgraph S4[階段四：結果預覽]
+        K[preview.py<br/>網格預覽圖]
+    end
+
+    I --> K
+
+    subgraph S5[階段五：子聚類細分（選用）]
+        L[subcluster.py<br/>DINOv2 patch + HSV + 大小特徵<br/>PCA + UMAP 降維<br/>HDBSCAN / K-Means / Ensemble]
+    end
+
+    I --> L --> M[(最終子群<br/>final_result/sub_X/)]
+```
+
 > **注意**：本系統為無監督聚類，輸入資料不需要標籤。訓練與推論使用同一批資料 — 訓練階段學習特徵表示與群中心，推論階段將每張影像分配到對應的 cluster。
 
 ### 階段一：影像前處理

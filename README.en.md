@@ -59,6 +59,44 @@ pip install -r requirements.txt
 
 The pipeline has five stages: **Preprocessing** → **Training** → **Inference & clustering** → **Result preview** → **Sub-clustering** (optional).
 
+```mermaid
+flowchart TD
+    A[Raw sticky-trap photos<br/>Bugdatasets/] --> B
+
+    subgraph S1[Stage 1: Preprocessing]
+        B[crop_corners.py<br/>mask corners] --> C[crop_border.py<br/>crop borders] --> D[adaptive_tile.py<br/>adaptive tiling]
+    end
+
+    D --> E[(Trainable tiles<br/>adaptive_output/)]
+
+    subgraph S2[Stage 2: Training]
+        F[main.py<br/>DINOv2 / ViT / ResNet<br/>SeCu + Medoid + MML]
+    end
+
+    E --> F --> G[(Best model<br/>best_model.pth.tar)]
+
+    subgraph S3[Stage 3: Inference & clustering]
+        H[inference.py<br/>assign clusters]
+    end
+
+    E --> H
+    G --> H
+    H --> I[(Clusters<br/>output/clusterN/cluster_X/)]
+    H --> J[Distribution CSV<br/>+ 3D t-SNE<br/>+ ACC / NMI / ARI]
+
+    subgraph S4[Stage 4: Result preview]
+        K[preview.py<br/>grid previews]
+    end
+
+    I --> K
+
+    subgraph S5[Stage 5: Sub-clustering optional]
+        L[subcluster.py<br/>DINOv2 patch + HSV + size<br/>PCA + UMAP reduction<br/>HDBSCAN / K-Means / Ensemble]
+    end
+
+    I --> L --> M[(Final sub-clusters<br/>final_result/sub_X/)]
+```
+
 > **Note**: This is an unsupervised system — input data needs no labels. Training and inference use the same dataset: training learns the feature representation and cluster centers, while inference assigns each image to a cluster.
 
 ### Stage 1: Image preprocessing
