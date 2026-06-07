@@ -1,0 +1,41 @@
+============================================================
+CVGIP 2026 — Oral Track — 論文摘要 (Word, ≤1 page, 100–250 words)
+貼進官方「摘要格式範本.doc」：標題、作者、Abstract、Keywords 依範本欄位填入。
+（本檔僅提供純文字內容；作者/單位/email 請自行補上）
+============================================================
+
+TITLE
+Unsupervised Deep Clustering for Insect Monitoring on Sticky Traps in
+Melon Greenhouses with DINOv2 and Hierarchical Sub-clustering
+
+AUTHORS
+<Author One>1, <Author Two>1, <Author Three>2
+1 <Department, University>   2 <Research Institute>
+{author1, author2}@xxx.edu.tw
+
+ABSTRACT  (~224 words)
+Yellow sticky traps are a standard tool for monitoring flying pests in
+greenhouse agriculture, but counting and identifying the trapped insects is
+still performed manually, which is slow, fatiguing, and difficult to scale
+across a whole farm. Supervised detectors can automate this task, yet they
+require large, expert-annotated datasets that are costly to obtain for the
+many morphologically similar species found on a single trap. We present a
+fully unsupervised pipeline that takes raw sticky-trap photographs and groups
+the individual insects with no human labels. The pipeline first isolates each
+insect through border cropping, corner masking, and an adaptive-tiling step
+driven by HSV background detection. It then learns visual representations with
+Stable Cluster Discrimination (SeCu) built on a frozen DINOv2 backbone, which
+we extend with medoid-based center re-estimation for a small but consistent
+gain in cluster cohesion; an additionally explored graph-modularity loss (MML)
+is reported honestly as a metric-neutral, backbone-sensitive ablation rather
+than a contribution. Finally, a hierarchical sub-clustering stage fuses DINOv2
+patch-level features, foreground HSV histograms, and size cues, then refines a
+coarse cluster through ensemble HDBSCAN with a consensus matrix and per-sample
+stability scores. On 4,305 real insect crops extracted from 925 greenhouse
+trap photos, the system produces eight coherent coarse clusters and a finer
+set of sub-clusters. The approach is practical, low in labeling cost, and
+deployable; the full source code is released.
+
+KEYWORDS
+Unsupervised deep clustering; Self-supervised learning; DINOv2;
+Sticky-trap pest monitoring; Hierarchical sub-clustering
