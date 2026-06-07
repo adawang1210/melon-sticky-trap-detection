@@ -1,2 +1,8 @@
-﻿tag,backbone,loss,N,clusters,silhouette_cos,silhouette_euc,davies_bouldin,calinski_harabasz
+tag,backbone,loss,N,clusters,silhouette_cos,silhouette_euc,davies_bouldin,calinski_harabasz
 dinov2_size-mml,dinov2,size-mml,4305,8,0.4853,0.3139,1.1325,1497.61
+rn18-size,resnet18,size,4305,8,0.2921,0.1952,1.3158,1483.19
+rn18-mml,resnet18,size-mml,4305,8,0.3131,0.2022,1.2570,1242.97
+vit-size,vit,size,4305,8,0.4212,0.2807,1.2905,1647.01
+vit-mml,vit,size-mml,4305,8,0.2365,0.1694,1.1704,1311.62
+dinov2-size,dinov2,size,4305,8,0.4874,0.3206,1.1348,1437.95
+dinov2-nomedoid,dinov2,size-mml,4305,8,0.4746,0.3126,1.1121,1264.44
