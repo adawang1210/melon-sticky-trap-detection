@@ -29,6 +29,8 @@
 \usepackage{titlesec}
 \usepackage{enumitem}
 \usepackage{authblk}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning}
 
 % ---------- Section style: "1. INTRODUCTION" (centered, ALL CAPS, bold) ----------
 \titleformat{\section}
@@ -70,7 +72,7 @@ UNSUPERVISED DEEP CLUSTERING FOR INSECT MONITORING ON STICKY TRAPS IN MELON GREE
     \maketitle
     \begin{abstract}
 \noindent
-Yellow sticky traps are a standard tool for monitoring flying pests in greenhouse agriculture, but counting and identifying the trapped insects is still performed manually, which is slow, fatiguing, and difficult to scale across a whole farm. Supervised detectors can automate this task, yet they require large, expert-annotated datasets that are costly to obtain for the many morphologically similar species found on a single trap. We present a fully unsupervised pipeline that takes raw sticky-trap photographs and groups the individual insects with no human labels. The pipeline first isolates each insect through border cropping, corner masking, and an adaptive-tiling step driven by HSV background detection. It then learns visual representations with Stable Cluster Discrimination (SeCu) built on a frozen DINOv2 backbone, which we extend with medoid-based center re-estimation and a graph-modularity loss (MML) to improve cluster stability. Finally, a hierarchical sub-clustering stage fuses DINOv2 patch-level features, foreground HSV histograms, and size cues, then refines a coarse cluster through ensemble HDBSCAN with a consensus matrix and per-sample stability scores. On 4{,}305 real insect crops extracted from 925 greenhouse trap photos, the system produces eight coherent coarse clusters and a finer set of sub-clusters. The approach is practical, low in labeling cost, and deployable; the full source code is released.
+Yellow sticky traps are a standard tool for monitoring flying pests in greenhouse agriculture, but counting and identifying the trapped insects is still performed manually, which is slow, fatiguing, and difficult to scale across a whole farm. Supervised detectors can automate this task, yet they require large, expert-annotated datasets that are costly to obtain for the many morphologically similar species found on a single trap. We present a fully unsupervised pipeline that takes raw sticky-trap photographs and groups the individual insects with no human labels. The pipeline first isolates each insect through border cropping, corner masking, and an adaptive-tiling step driven by HSV background detection. It then learns visual representations with Stable Cluster Discrimination (SeCu) built on a frozen DINOv2 backbone, which we extend with medoid-based center re-estimation for a small but consistent gain in cluster cohesion; an additionally explored graph-modularity loss (MML) is reported honestly as a metric-neutral, backbone-sensitive ablation rather than a contribution. Finally, a hierarchical sub-clustering stage fuses DINOv2 patch-level features, foreground HSV histograms, and size cues, then refines a coarse cluster through ensemble HDBSCAN with a consensus matrix and per-sample stability scores. On 4{,}305 real insect crops extracted from 925 greenhouse trap photos, the system produces eight coherent coarse clusters and a finer set of sub-clusters. The approach is practical, low in labeling cost, and deployable; the full source code is released.
 \medskip
 
 \noindent\textbf{Keywords:} Unsupervised deep clustering, Self-supervised learning, DINOv2, Sticky-trap pest monitoring, Hierarchical sub-clustering.
@@ -92,7 +94,7 @@ In this work we build a complete unsupervised pipeline that runs end-to-end from
 
 \begin{itemize}[leftmargin=1.2em,itemsep=2pt,topsep=2pt]
 \item We design a complete, zero-label clustering pipeline for yellow sticky traps that proceeds from raw board photographs all the way to per-insect grouping, including a robust HSV-driven adaptive-tiling stage that extracts single-insect crops without manual region annotation.
-\item We extend Stable Cluster Discrimination (SeCu, ICCV 2023) to a frozen DINOv2 backbone and augment it with medoid-based center re-estimation and a graph-modularity loss (MML) that together improve cluster compactness and stability.
+\item We extend Stable Cluster Discrimination (SeCu, ICCV 2023) to a frozen DINOv2 backbone and augment it with medoid-based center re-estimation, which yields a small but consistent gain in cluster cohesion. We additionally explore a graph-modularity loss (MML) and report it honestly: it is metric-neutral on the DINOv2 backbone and detrimental to a plain ViT, so it is not part of our proposed configuration.
 \item We add a hierarchical sub-clustering stage that fuses DINOv2 patch-level features, foreground HSV histograms, and size/area cues, then refines a single coarse cluster via ensemble HDBSCAN with a consensus matrix and per-sample stability scores.
 \item We validate the system on 4{,}305 real greenhouse sticky-trap crops and release the full source code for reproducibility.
 \end{itemize}
@@ -109,7 +111,7 @@ Deep clustering jointly learns a feature representation and a partition of the d
 Self-supervised learning removes the need for labels when pre-training visual encoders. DINO~\cite{caron2021dino} showed that self-distillation with a momentum teacher and a Vision Transformer~\cite{dosovitskiy2021vit} yields features whose attention maps localize objects and whose embeddings cluster semantically without supervision. DINOv2~\cite{oquab2024dinov2} scales this recipe with curated data and architectural refinements, producing general-purpose features that transfer strongly to dense and fine-grained tasks. Because these features already separate subtle visual categories, they are well suited to distinguishing visually similar insects, and we use a frozen DINOv2 ViT-B/14 (with register tokens) as our backbone.
 
 \subsection{Insect Detection on Sticky Traps}
-A body of work targets pest counting on sticky traps. Several systems train supervised detectors to localize and count whiteflies, thrips, and other pests on yellow boards~\cite{liu2016aphids, wang2021yellowtrap}, while others combine classical color segmentation with shallow classifiers~\cite{rustia2021cascade}. These methods report strong accuracy but depend on annotated bounding boxes or species labels, and they are typically tuned to a fixed camera setup and pest set. Our work differs by removing labels entirely: we use unsupervised clustering to organize the trapped insects, so that human effort is reduced to naming a few representative groups rather than annotating every specimen.
+A body of work targets pest counting on sticky traps~\cite{hong2022stickyreview}. Several systems train supervised detectors to localize and count whiteflies, thrips, and other pests on yellow boards~\cite{liu2016aphids, wang2021yellowtrap}, while others combine classical color segmentation with shallow classifiers~\cite{rustia2021cascade}. These methods report strong accuracy but depend on annotated bounding boxes or species labels, and they are typically tuned to a fixed camera setup and pest set. Our work differs by removing labels entirely: we use unsupervised clustering to organize the trapped insects, so that human effort is reduced to naming a few representative groups rather than annotating every specimen.
 
 % =====================================================================
 \section{Methodology}
@@ -141,8 +143,8 @@ We replace SeCu's original convolutional encoder with a frozen DINOv2 ViT-B/14 w
 \paragraph{(a) Medoid-based center re-estimation.}
 Randomly initialized centers can drift toward non-representative directions early in training. After a warm-up of $30$ epochs, we periodically re-estimate each center as the medoid of its cluster. For numerical robustness we use a top-$k$ variant: within a cluster we keep the top $90\%$ of samples most similar to the current center, then choose as the new center the sample with the largest summed cosine similarity to the rest, and renormalize it. This anchors every center on an actual, central exemplar of its cluster.
 
-\paragraph{(b) Graph-modularity loss (MML).}
-To further encourage well-separated, internally cohesive clusters, we add a graph-modularity loss inspired by community detection~\cite{newman2006modularity}. From a mini-batch of normalized embeddings we build an affinity graph: pairs with cosine similarity above $\varepsilon\!=\!0.8$ are connected with their similarity weight, and any otherwise isolated node is rescued by a single edge to its most similar neighbor only if that similarity exceeds $0.6$ (``better none than spurious''). We form the modularity matrix $B = A - \mathbf{d}\mathbf{d}^{\!\top}\!/(2m)$ from the degree vector $\mathbf{d}$ and total weight $m$, build a normalized cluster-indicator matrix $\widetilde{U}$ from the current pseudo-labels, and minimize the negative modularity $-\,\mathrm{tr}(\widetilde{U}^{\!\top} B \widetilde{U})/(2m)$. The MML term is activated in the later phase of training (after epoch $100$) and mixed into the total objective with a weight of $12$, while the size constraint (\texttt{secu\_lratio}\,$=0.7$) remains active throughout. Intuitively, the size constraint prevents collapse and the modularity term tightens the community structure of the embedding graph.
+\paragraph{(b) Graph-modularity loss (MML), an explored extension.}
+As an exploratory attempt to further encourage well-separated, internally cohesive clusters, we also study a graph-modularity loss inspired by community detection~\cite{newman2006modularity}. From a mini-batch of normalized embeddings we build an affinity graph: pairs with cosine similarity above $\varepsilon\!=\!0.8$ are connected with their similarity weight, and any otherwise isolated node is rescued by a single edge to its most similar neighbor only if that similarity exceeds $0.6$ (``better none than spurious''). We form the modularity matrix $B = A - \mathbf{d}\mathbf{d}^{\!\top}\!/(2m)$ from the degree vector $\mathbf{d}$ and total weight $m$, build a normalized cluster-indicator matrix $\widetilde{U}$ from the current pseudo-labels, and minimize the negative modularity $-\,\mathrm{tr}(\widetilde{U}^{\!\top} B \widetilde{U})/(2m)$. The MML term is activated in the later phase of training (after epoch $100$) and mixed into the total objective with a weight of $12$, while the size constraint (\texttt{secu\_lratio}\,$=0.7$) remains active throughout. We report MML transparently: as the ablation in Section~4.5 shows, with this configuration it leaves the internal clustering indices essentially unchanged on the DINOv2 backbone and degrades a plain ViT. We therefore do \emph{not} count it among our contributions, and our proposed configuration is DINOv2 with the size constraint and medoid re-estimation; whether a better-tuned modularity term helps is left for future work.
 
 \subsection{Hierarchical Sub-clustering}
 Even a clean coarse cluster can mix morphologically close but distinct insects. We therefore add an optional second pass that refines a single coarse cluster (or a whole layer at once). This stage uses the frozen, pretrained DINOv2 with no fine-tuning, so it is a pure post-processing step over the SeCu output.
@@ -151,7 +153,7 @@ Even a clean coarse cluster can mix morphologically close but distinct insects. 
 For each crop we extract three complementary descriptors: (i) DINOv2 patch-level features---the mean and standard deviation of the patch tokens, giving a 1536-d vector; (ii) a foreground HSV color histogram---64 bins $\times$ 3 channels plus color statistics (199-d), computed after excluding the yellow background; and (iii) size/area cues---foreground ratio, bounding-box aspect ratio, and mean foreground brightness (3-d). The three descriptors are individually L2-normalized and concatenated with adjustable color/size weights.
 
 \paragraph{Dimensionality reduction and clustering.}
-The fused vector is reduced first by PCA, retaining $95\%$ of the variance automatically, and then embedded with UMAP using the cosine metric and \texttt{min\_dist}\,$=\!0.0$ to favor tight, separable groups. On the UMAP embedding we cluster with one of HDBSCAN~\cite{campello2013hdbscan, mcinnes2017hdbscan}, K-Means, or an ensemble scheme. The ensemble runs HDBSCAN nine times under varied parameters and aggregates them through a consensus (co-association) matrix; the final partition is read from the consensus, and a per-sample stability score is computed. Samples whose stability falls below $0.4$ are flagged as ``uncertain'' and set aside, while HDBSCAN noise points can be merged into their nearest sub-cluster. This yields purer sub-groups together with an explicit confidence signal for downstream human review.
+The fused vector is reduced first by PCA, retaining $95\%$ of the variance automatically, and then embedded with UMAP~\cite{mcinnes2018umap} using the cosine metric and \texttt{min\_dist}\,$=\!0.0$ to favor tight, separable groups. On the UMAP embedding we cluster with one of HDBSCAN~\cite{campello2013hdbscan, mcinnes2017hdbscan}, K-Means, or an ensemble scheme. The ensemble runs HDBSCAN nine times under varied parameters and aggregates them through a consensus (co-association) matrix; the final partition is read from the consensus, and a per-sample stability score is computed. Samples whose stability falls below $0.4$ are flagged as ``uncertain'' and set aside, while HDBSCAN noise points can be merged into their nearest sub-cluster. This yields purer sub-groups together with an explicit confidence signal for downstream human review.
 
 % =====================================================================
 \section{Experiments}
@@ -163,22 +165,22 @@ Our data are high-resolution photographs of yellow sticky traps collected from m
 We implement the system in PyTorch with mixed-precision training (AMP: \texttt{autocast} $+$ \texttt{GradScaler}) and DistributedDataParallel (\texttt{gloo} backend). The encoder is a frozen DINOv2 ViT-B/14-reg; the SeCu projection head is trained with AdamW for $201$ epochs at batch size $64$, base learning rate $0.01$, and a warm-up of $30$ epochs. We set the representation temperature \texttt{-{}-secu-tx}\,$=\!0.07$, the size-constraint weight \texttt{-{}-secu-alpha}\,$=\!6N/50\!\approx\!517$ for $N\!=\!4{,}305$ samples, the multi-head cluster counts \texttt{-{}-secu-k}\,$=\!8\;9\;10$, and the size lower-bound ratio \texttt{-{}-secu-lratio}\,$=\!0.7$. Medoid re-estimation (top-$90\%$) is enabled after the warm-up, and the MML term ($\varepsilon\!=\!0.8$, weight $12$) is enabled in the later training phase. At inference we set \texttt{clusters\_amount}\,$=\!8$ to read out the $K\!=\!8$ head, assign every crop to a cluster, and additionally export a 3-D t-SNE~\cite{vandermaaten2008tsne} visualization and the per-cluster distribution report. The code is released at the project repository.
 
 \subsection{Quantitative Results}
-Because the dataset has no ground-truth species labels, we evaluate the partition with three \emph{internal} validation indices that require no labels: the Silhouette coefficient (higher is better), the Davies--Bouldin index (DBI, lower is better), and the Calinski--Harabasz index (CHI, higher is better). All three are computed on the 128-d L2-normalized embedding produced by the trained projection head, with Silhouette under the cosine metric to match the normalized features.\footnote{Label-dependent scores (ACC, NMI, ARI under Hungarian assignment) are omitted because no ground-truth species labels are available; our inference script computes them automatically once a labeled validation subset is annotated.} Table~\ref{tab:metrics} compares backbones and losses under these indices. Our full model (DINOv2 $+$ size-mml) attains a Silhouette of $0.485$, DBI $1.13$, and CHI $1497.6$ over the $N\!=\!4{,}305$ crops, which form eight well-separated, non-empty clusters; the remaining rows are marked TBD pending the corresponding training runs.
+Because the dataset has no ground-truth species labels, we evaluate the partition with three \emph{internal} validation indices that require no labels: the Silhouette coefficient (higher is better), the Davies--Bouldin index (DBI, lower is better), and the Calinski--Harabasz index (CHI, higher is better). All three are computed on the 128-d L2-normalized embedding produced by the trained projection head, with Silhouette under the cosine metric to match the normalized features.\footnote{Label-dependent scores (ACC, NMI, ARI under Hungarian assignment) are omitted because no ground-truth species labels are available; our inference script computes them automatically once a labeled validation subset is annotated.} Table~\ref{tab:metrics} compares all six backbone/loss combinations. The dominant factor is the backbone: DINOv2 reaches a Silhouette of $0.487$ (size) / $0.485$ (size-mml), clearly above ViT-B ($0.421$) and ResNet-18 ($0.292$--$0.313$) over the $N\!=\!4{,}305$ crops, which form eight well-separated, non-empty clusters. The size and size-mml variants of DINOv2 are statistically indistinguishable ($0.487$ vs.\ $0.485$): the MML term neither helps nor hurts this backbone, as we revisit in the ablation. Our released checkpoint (DINOv2 $+$ size-mml) is the source of all qualitative figures and the cluster distribution below; because MML is metric-neutral, the \emph{proposed method} is DINOv2 $+$ size constraint $+$ medoid re-estimation.
 
 \begin{table}[t]
 \centering
-\caption{Label-free clustering quality across backbones and losses. Silhouette (cosine)~$\uparrow$, Davies--Bouldin~$\downarrow$, Calinski--Harabasz~$\uparrow$. Bold = our full model; TBD rows await the corresponding training runs.}
+\caption{Label-free clustering quality across backbones and losses. Silhouette (cosine)~$\uparrow$, Davies--Bouldin~$\downarrow$, Calinski--Harabasz~$\uparrow$. The bold row is our released checkpoint (size-mml), which produces all qualitative figures; since its MML term is metric-neutral (Table~\ref{tab:ablation}b), the proposed method is DINOv2 $+$ size $+$ medoid.}
 \label{tab:metrics}
 \small
 \begin{tabular}{@{}llccc@{}}
 \toprule
 Backbone   & Loss      & Silh.\,$\uparrow$ & DBI\,$\downarrow$ & CHI\,$\uparrow$ \\
 \midrule
-ResNet-18  & size      & TBD & TBD & TBD \\
-ResNet-18  & size-mml  & TBD & TBD & TBD \\
-ViT-B      & size      & TBD & TBD & TBD \\
-ViT-B      & size-mml  & TBD & TBD & TBD \\
-DINOv2     & size      & TBD & TBD & TBD \\
+ResNet-18  & size      & 0.292 & 1.32 & 1483.2 \\
+ResNet-18  & size-mml  & 0.313 & 1.26 & 1243.0 \\
+ViT-B      & size      & 0.421 & 1.29 & 1647.0 \\
+ViT-B      & size-mml  & 0.237 & 1.17 & 1311.6 \\
+DINOv2     & size      & 0.487 & 1.13 & 1438.0 \\
 DINOv2     & size-mml (ours) & \textbf{0.485} & \textbf{1.13} & \textbf{1497.6} \\
 \bottomrule
 \end{tabular}
@@ -213,11 +215,11 @@ Total   & 4{,}305 & 100\% \\
 Qualitative inspection corroborates the quantitative balance. Fig.~\ref{fig:tsne} shows the 3-D t-SNE embedding of the learned representation, in which the eight clusters form distinguishable regions of the feature space. Fig.~\ref{fig:clusters} presents representative crops from each of the eight clusters in a $2\!\times\!4$ grid; insects within a cluster share a consistent morphology (body shape, color, and size), confirming that the unsupervised grouping is agronomically meaningful. Fig.~\ref{fig:subcluster} illustrates the effect of hierarchical sub-clustering: a single coarse cluster that mixed several near-identical morphologies is split into cleaner sub-groups, with low-confidence samples isolated as ``uncertain.'' Applying the sub-clustering pass across the coarse layer yields a finer organization of $4{,}020$ retained images into $17$ sub-clusters of widely varying size (from a few specimens to roughly a thousand), reflecting the natural imbalance of pest abundance on real traps.
 
 \subsection{Ablation Study}
-We design four ablations to isolate the contribution of each component, scored with the same label-free indices as Table~\ref{tab:metrics}. Blocks (a)--(c) are evaluated on the main 128-d embedding; block (d) concerns the sub-clustering dimensionality reduction and is therefore evaluated on a single coarse cluster in a fixed PCA reference space (so the three DR variants are directly comparable), which is on a different scale from (a)--(c). The $\Delta$ column reports the relative change in Silhouette over the stated baseline; rows not yet run are marked TBD.
+We design four ablations to isolate the contribution of each component, scored with the same label-free indices as Table~\ref{tab:metrics}. Blocks (a)--(c) are evaluated on the main 128-d embedding; block (d) concerns the sub-clustering dimensionality reduction and is evaluated on coarse cluster~0 by the Silhouette of the HDBSCAN partition in its clustering space, with the number of discovered sub-clusters shown in parentheses (it is therefore on a different scale from blocks~(a)--(c)). The $\Delta$ column reports the relative change in Silhouette over the stated baseline.
 
 \begin{table}[t]
 \centering
-\caption{Ablation study under label-free indices (Silhouette~$\uparrow$, DBI~$\downarrow$, CHI~$\uparrow$). $\Delta$ = relative change in Silhouette over the stated baseline. Block (d) is evaluated in a fixed sub-clustering reference space and is not comparable to (a)--(c).}
+\caption{Ablation study under label-free indices (Silhouette~$\uparrow$, DBI~$\downarrow$, CHI~$\uparrow$). $\Delta$ = relative change in Silhouette over the stated baseline. Block (d) reports the HDBSCAN clustering-space Silhouette on coarse cluster~0 (sub-cluster count in parentheses) and is not comparable to (a)--(c).}
 \label{tab:ablation}
 \small
 \begin{tabular}{@{}lcccc@{}}
@@ -225,39 +227,41 @@ We design four ablations to isolate the contribution of each component, scored w
 Setting & Silh.\,$\uparrow$ & DBI\,$\downarrow$ & CHI\,$\uparrow$ & $\Delta$ \\
 \midrule
 \multicolumn{5}{l}{\textit{(a) Medoid re-estimation}}\\
-Full model              & \textbf{0.485} & \textbf{1.13} & \textbf{1497.6} & --- \\
-\;\; w/o medoid         & TBD & TBD & TBD & TBD\% \\
+Full model              & \textbf{0.485} & 1.13 & \textbf{1497.6} & --- \\
+\;\; w/o medoid         & 0.475 & 1.11 & 1264.4 & $-2\%$ \\
 \midrule
 \multicolumn{5}{l}{\textit{(b) Modularity loss}}\\
-Full model              & \textbf{0.485} & \textbf{1.13} & \textbf{1497.6} & --- \\
-\;\; w/o MML            & TBD & TBD & TBD & TBD\% \\
+Full model (w/ MML)     & 0.485 & 1.13 & \textbf{1497.6} & --- \\
+\;\; w/o MML            & \textbf{0.487} & 1.13 & 1438.0 & $+0.4\%$ \\
 \midrule
-\multicolumn{5}{l}{\textit{(c) Backbone}}\\
-ResNet-18               & TBD & TBD & TBD & TBD\% \\
-ViT-B                   & TBD & TBD & TBD & TBD\% \\
-DINOv2 (ours)           & \textbf{0.485} & \textbf{1.13} & \textbf{1497.6} & --- \\
+\multicolumn{5}{l}{\textit{(c) Backbone (loss fixed to size)}}\\
+ResNet-18               & 0.292 & 1.32 & 1483.2 & $-40\%$ \\
+ViT-B                   & 0.421 & 1.29 & 1647.0 & $-14\%$ \\
+DINOv2                  & \textbf{0.487} & \textbf{1.13} & 1438.0 & --- \\
 \midrule
-\multicolumn{5}{l}{\textit{(d) Sub-clustering DR (ref.\ space)}}\\
-PCA-only                & TBD & --- & --- & TBD\% \\
-UMAP-only               & TBD & --- & --- & TBD\% \\
-PCA + UMAP (ours)       & TBD & --- & --- & --- \\
+\multicolumn{5}{l}{\textit{(d) Sub-clustering DR (cluster~0, clustering space)}}\\
+PCA-only (3 sub)            & 0.096 & --- & --- & $-72\%$ \\
+UMAP-only (12 sub)          & 0.348 & --- & --- & $+3\%$ \\
+PCA $+$ UMAP, ours (12 sub) & 0.339 & --- & --- & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The four axes probe, respectively: (a) whether anchoring centers on real medoids improves stability over random/EMA centers; (b) whether the modularity term tightens community structure beyond the size constraint alone; (c) the value of strong self-supervised features (DINOv2) over ResNet-18 and a plain ViT; and (d) whether the PCA$\rightarrow$UMAP cascade outperforms either reducer alone in the sub-clustering stage. Qualitatively, removing the medoid step makes early centers drift and increases cross-cluster bleed, removing MML loosens cluster boundaries in the t-SNE embedding, and replacing DINOv2 with ResNet-18 visibly mixes morphologically similar insects---consistent with the design motivation of each component.
+The four axes probe, respectively: (a) the effect of anchoring centers on real medoids; (b) the effect of the modularity term; (c) the value of strong self-supervised features (DINOv2) over ResNet-18 and a plain ViT; and (d) the role of each reducer in the sub-clustering stage. We report the outcomes honestly, including where a component does not help. (a)~Medoid re-estimation gives a small but consistent improvement (Silhouette $0.485$ with it vs.\ $0.475$ without, $+2\%$). (c)~The backbone is the decisive factor: at a fixed size loss, DINOv2 ($0.487$) clearly outperforms ViT-B ($0.421$, $-14\%$) and ResNet-18 ($0.292$, $-40\%$), confirming the value of strong self-supervised features for fine-grained insect appearance. (b)~In contrast, the modularity loss does \emph{not} help: removing MML leaves the internal indices essentially unchanged on DINOv2 ($0.487$ vs.\ $0.485$), and Table~\ref{tab:metrics} shows that MML markedly degrades a plain ViT ($0.421\!\to\!0.237$). We therefore present MML as a metric-neutral, backbone-sensitive extension rather than a contribution. (d)~UMAP is the decisive reducer in the sub-clustering stage: without it (PCA-only) HDBSCAN resolves coarse cluster~0 into only three sub-groups with weak cohesion (Silhouette $0.10$), whereas adding UMAP yields twelve cohesive sub-clusters (Silhouette $\approx\!0.34$); PCA$+$UMAP essentially matches UMAP-only ($0.339$ vs.\ $0.348$) while reducing the pre-UMAP dimensionality from $1738$ to $436$, so PCA acts as a cheap, quality-preserving pre-reduction.
 
 % =====================================================================
 \section{Discussion}
 
 The main limitation is intrinsic to purely unsupervised training: large pose variation within a single species can cause that species to split across multiple clusters, because appearance---not taxonomy---drives the grouping. Dorsal and lateral views of the same insect, or specimens partially occluded by glue or debris, may land in different clusters. The hierarchical sub-clustering stage mitigates the opposite failure (one cluster mixing species) but does not by itself merge pose-induced splits. A second limitation concerns evaluation: without ground-truth species labels we rely on label-free internal indices (Silhouette, DBI, CHI) and qualitative coherence; absolute label-dependent scores such as ACC/NMI/ARI would require a small annotated validation subset, which we leave for future work.
 
-For future work, the most promising direction is to treat the produced clusters as pseudo-labels for semi-supervised fine-tuning. An agronomist would name and, where needed, merge a handful of clusters or sub-clusters; these verified groups then supervise a lightweight classifier or detector, closing the loop from zero-label discovery to deployable, named-species monitoring at a fraction of the usual annotation cost. Pose-invariant augmentation and multi-view consolidation are natural complements to reduce species splitting.
+A third point concerns the role of the deep-clustering stage itself. We observed that clustering the frozen pretrained DINOv2 features directly with $k$-means already yields balanced, non-degenerate groups (normalized size entropy $0.98$ vs.\ $0.97$ for our model), so SeCu does not out-balance naive clustering, and a strict quantitative advantage is hard to establish without ground-truth labels. We nonetheless adopt the DINOv2-based SeCu clustering for three practical reasons: it is end-to-end---a single trained model assigns clusters at inference, with no separate feature-export-and-cluster step; it learns multiple granularities jointly through its $K\!\in\!\{8,9,10\}$ heads; and its size constraint guarantees that no cluster collapses during the joint representation--assignment optimization (smallest/largest size ratio $0.38$). Establishing whether the learned representation yields cleaner clusters than static features---beyond the qualitative coherence visible in Figs.~\ref{fig:clusters} and~\ref{fig:tsne}---again awaits a labeled validation subset.
+
+For future work, the most promising direction is to treat the produced clusters as pseudo-labels for semi-supervised fine-tuning. An agronomist would name and, where needed, merge a handful of clusters or sub-clusters; these verified groups then supervise a lightweight classifier or detector, closing the loop from zero-label discovery to deployable, named-species monitoring at a fraction of the usual annotation cost. Pose-invariant augmentation and multi-view consolidation are natural complements to reduce species splitting. Finally, our modularity loss is metric-neutral under its current weight and late-activation schedule and is backbone-sensitive; revisiting its formulation, weighting, and schedule is a concrete avenue to turn it into a genuine benefit.
 
 % =====================================================================
 \section{Conclusion}
 
-We presented a fully unsupervised pipeline for monitoring insects on yellow sticky traps in melon greenhouses, spanning raw-photo preprocessing, constrained deep clustering, and hierarchical sub-clustering. Building on SeCu with a frozen DINOv2 backbone, we added medoid-based center re-estimation and a graph-modularity loss for more stable, cohesive clusters, and a feature-fused ensemble sub-clustering stage for finer, confidence-aware grouping. On $4{,}305$ real greenhouse crops the system yields eight balanced, visually coherent clusters and a finer set of sub-clusters, all without human labels. The approach is practical, low in labeling cost, and deployable, and we release the full source code to support adoption and further study.
+We presented a fully unsupervised pipeline for monitoring insects on yellow sticky traps in melon greenhouses, spanning raw-photo preprocessing, constrained deep clustering, and hierarchical sub-clustering. Building on SeCu with a frozen DINOv2 backbone, we added medoid-based center re-estimation for a small, consistent gain in cluster cohesion, and a feature-fused ensemble sub-clustering stage for finer, confidence-aware grouping; an explored graph-modularity loss was found metric-neutral on this backbone and is reported as such rather than claimed as a benefit. On $4{,}305$ real greenhouse crops the system yields eight balanced, visually coherent clusters and a finer set of sub-clusters, all without human labels. The approach is practical, low in labeling cost, and deployable, and we release the full source code to support adoption and further study.
 
 % =====================================================================
 \section*{Acknowledgement}
@@ -373,9 +377,26 @@ J.-W.~Hong, W.-C.~Lin, and C.-H.~Hsu,
 
 \begin{figure*}[t]
   \centering
-  % Replace with a vector re-render of the README Mermaid diagram.
-  \fbox{\parbox{0.9\textwidth}{\centering \textit{[Pipeline figure --- re-render the README Mermaid flowchart as a vector image and place it here.]}\\[1ex] \texttt{raw $\rightarrow$ preprocess $\rightarrow$ training (DINOv2 $+$ SeCu $+$ medoid $+$ MML) $\rightarrow$ inference $\rightarrow$ sub-clustering}}}
-  \caption{End-to-end system pipeline. Raw board photographs are cleaned and tiled into single-insect crops, the SeCu model is trained on these crops, every crop is assigned to a coarse cluster at inference, and the optional sub-clustering stage refines a coarse cluster into finer groups.}
+  \begin{tikzpicture}[
+    font=\scriptsize,
+    box/.style={draw, rounded corners, align=center, text width=2.05cm,
+                minimum height=1.25cm, fill=blue!5, inner sep=2pt},
+    arr/.style={-{Stealth[length=2mm]}, thick},
+    node distance=0.4cm,
+  ]
+    \node[box] (raw) {Raw board\\photo};
+    \node[box, right=of raw] (pre) {Preprocess:\\corner mask,\\border crop,\\adaptive tiling};
+    \node[box, right=of pre] (crop) {Single-insect\\crops\\($4{,}305$)};
+    \node[box, right=of crop, fill=green!8] (train) {Training:\\DINOv2 $+$ SeCu\\$+$ medoid};
+    \node[box, right=of train] (inf) {Inference:\\assign 8\\coarse clusters};
+    \node[box, right=of inf, fill=orange!8] (sub) {Sub-clustering:\\DINOv2$+$HSV$+$size,\\PCA$+$UMAP,\\ensemble HDBSCAN};
+    \draw[arr] (raw) -- (pre);
+    \draw[arr] (pre) -- (crop);
+    \draw[arr] (crop) -- (train);
+    \draw[arr] (train) -- (inf);
+    \draw[arr] (inf) -- (sub);
+  \end{tikzpicture}
+  \caption{End-to-end system pipeline. Raw board photographs are cleaned and tiled into single-insect crops, the SeCu model (DINOv2 $+$ size constraint $+$ medoid) is trained on these crops, every crop is assigned to a coarse cluster at inference, and the optional sub-clustering stage refines a coarse cluster into finer groups.}
   \label{fig:pipeline}
 \end{figure*}
 
@@ -393,7 +414,7 @@ J.-W.~Hong, W.-C.~Lin, and C.-H.~Hsu,
     \includegraphics[width=0.22\textwidth]{cluster_7.jpg} \\
     \small Cluster 4 & \small Cluster 5 & \small Cluster 6 & \small Cluster 7 \\
   \end{tabular}
-  \caption{Representative crops from the eight coarse clusters obtained with DINOv2 $+$ SeCu $+$ MML on $4{,}305$ greenhouse insect crops. Within each cluster, samples share a consistent body shape, color, and size.}
+  \caption{Representative crops from the eight coarse clusters obtained with our DINOv2-based SeCu model on $4{,}305$ greenhouse insect crops. Within each cluster, samples share a consistent body shape, color, and size.}
   \label{fig:clusters}
 \end{figure*}
 
@@ -406,9 +427,8 @@ J.-W.~Hong, W.-C.~Lin, and C.-H.~Hsu,
 
 \begin{figure}[t]
   \centering
-  % Replace with the latest 3-D t-SNE PNG from Secu-revised/output/
-  \fbox{\parbox{0.9\linewidth}{\centering \textit{[3-D t-SNE PNG --- drop in the latest output from Secu-revised/output/]}}}
-  \caption{3-D t-SNE visualization of the learned embedding for the eight coarse clusters. Distinct colored regions correspond to the eight clusters; well-separated regions indicate that the unsupervised representation captures meaningful morphological differences.}
+  \includegraphics[width=0.95\linewidth]{tsne.png}
+  \caption{2-D t-SNE visualization (cosine metric) of the learned 128-d embedding for the eight coarse clusters of our released model. The clusters occupy distinct, well-separated regions, indicating that the unsupervised representation captures meaningful morphological differences.}
   \label{fig:tsne}
 \end{figure}
 
