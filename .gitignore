@@ -81,3 +81,17 @@ mlruns/
 *.bak
 tmp/
 temp/
+
+# LaTeX build artifacts
+*.aux
+*.out
+*.toc
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.synctex
+*.nav
+*.snm
+*.vrb
