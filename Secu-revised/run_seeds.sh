@@ -22,7 +22,7 @@ for seed in 1 2; do
     name="${tag}-s${seed}"
     echo "=== [$name] seed=$seed medoid=$medoid ==="
     rm -f model/best_model.pth.tar
-    "$PY" main.py "$DATA" -j 4 -p 50 --lr 0.01 --epochs 201 \
+    timeout 9000 "$PY" main.py "$DATA" -j 4 -p 50 --lr 0.01 --epochs 201 \
       --secu-num-ins 4305 --secu-alpha 517 --secu-k 8 9 10 \
       --clr 0.001 --min-crop 0.2 --log "secu-$name" --seed "$seed" \
       --dist-url "tcp://localhost:$port" \

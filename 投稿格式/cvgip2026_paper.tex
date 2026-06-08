@@ -245,9 +245,9 @@ We design four ablations to isolate the contribution of each component, scored w
 \toprule
 Setting & Silh.\,$\uparrow$ & DBI\,$\downarrow$ & CHI\,$\uparrow$ & $\Delta$ \\
 \midrule
-\multicolumn{5}{l}{\textit{(a) Medoid re-estimation}}\\
-Full model              & \textbf{0.485} & 1.13 & \textbf{1497.6} & --- \\
-\;\; w/o medoid         & 0.475 & 1.11 & 1264.4 & $-2\%$ \\
+\multicolumn{5}{l}{\textit{(a) Medoid re-estimation (mean$\pm$std over 3 seeds)}}\\
+Full model (w/ medoid)  & $0.486{\pm}0.002$ & 1.17 & 1537 & --- \\
+\;\; w/o medoid         & $0.466{\pm}0.009$ & 1.17 & 1200 & $-4.3\%$ \\
 \midrule
 \multicolumn{5}{l}{\textit{(b) Modularity loss}}\\
 Full model (w/ MML)     & 0.485 & 1.13 & \textbf{1497.6} & --- \\
@@ -266,7 +266,7 @@ PCA $+$ UMAP, ours (12 sub) & 0.339 & --- & --- & --- \\
 \end{tabular}
 \end{table}
 
-The four axes probe, respectively: (a) the effect of anchoring centers on real medoids; (b) the effect of the modularity term; (c) the value of strong self-supervised features (DINOv2) over ResNet-18 and a plain ViT; and (d) the role of each reducer in the sub-clustering stage. We report the outcomes honestly, including where a component does not help. (a)~Medoid re-estimation gives a small but consistent improvement (Silhouette $0.485$ with it vs.\ $0.475$ without, $+2\%$). (c)~The backbone is the decisive factor: at a fixed size loss, DINOv2 ($0.487$) clearly outperforms ViT-B ($0.421$, $-14\%$) and ResNet-18 ($0.292$, $-40\%$), confirming the value of strong self-supervised features for fine-grained insect appearance. (b)~In contrast, the modularity loss does \emph{not} help: removing MML leaves the internal indices essentially unchanged on DINOv2 ($0.487$ vs.\ $0.485$), and Table~\ref{tab:metrics} shows that MML markedly degrades a plain ViT ($0.421\!\to\!0.237$). We therefore present MML as a metric-neutral, backbone-sensitive extension rather than a contribution. (d)~UMAP is the decisive reducer in the sub-clustering stage: without it (PCA-only) HDBSCAN resolves coarse cluster~0 into only three sub-groups with weak cohesion (Silhouette $0.10$), whereas adding UMAP yields twelve cohesive sub-clusters (Silhouette $\approx\!0.34$); PCA$+$UMAP essentially matches UMAP-only ($0.339$ vs.\ $0.348$) while reducing the pre-UMAP dimensionality from $1738$ to $436$, so PCA acts as a cheap, quality-preserving pre-reduction.
+The four axes probe, respectively: (a) the effect of anchoring centers on real medoids; (b) the effect of the modularity term; (c) the value of strong self-supervised features (DINOv2) over ResNet-18 and a plain ViT; and (d) the role of each reducer in the sub-clustering stage. We report the outcomes honestly, including where a component does not help. (a)~Medoid re-estimation gives a consistent improvement: averaged over three seeds, Silhouette is $0.486{\pm}0.002$ with it versus $0.466{\pm}0.009$ without ($+4.5\%$), and it also markedly reduces the seed-to-seed variance, confirming the gain is not a single-seed artifact. (c)~The backbone is the decisive factor: at a fixed size loss, DINOv2 ($0.487$) clearly outperforms ViT-B ($0.421$, $-14\%$) and ResNet-18 ($0.292$, $-40\%$), confirming the value of strong self-supervised features for fine-grained insect appearance. (b)~In contrast, the modularity loss does \emph{not} help: removing MML leaves the internal indices essentially unchanged on DINOv2 ($0.487$ vs.\ $0.485$), and Table~\ref{tab:metrics} shows that MML markedly degrades a plain ViT ($0.421\!\to\!0.237$). We therefore present MML as a metric-neutral, backbone-sensitive extension rather than a contribution. (d)~UMAP is the decisive reducer in the sub-clustering stage: without it (PCA-only) HDBSCAN resolves coarse cluster~0 into only three sub-groups with weak cohesion (Silhouette $0.10$), whereas adding UMAP yields twelve cohesive sub-clusters (Silhouette $\approx\!0.34$); PCA$+$UMAP essentially matches UMAP-only ($0.339$ vs.\ $0.348$) while reducing the pre-UMAP dimensionality from $1738$ to $436$, so PCA acts as a cheap, quality-preserving pre-reduction.
 
 % =====================================================================
 \section{Discussion}
