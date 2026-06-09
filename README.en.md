@@ -6,11 +6,28 @@ An unsupervised deep-clustering system that automatically groups insects capture
 
 ---
 
+## 📄 Paper
+
+This project has been **written up as a complete research paper**, submitted to the **CVGIP 2026** (39th IPPR Conference on Computer Vision, Graphics, and Image Processing), Oral track:
+
+> **Unsupervised Deep Clustering for Insect Monitoring on Sticky Traps in Melon Greenhouses with DINOv2 and Hierarchical Sub-clustering**
+
+- Full paper: [`投稿格式/cvgip2026_paper.tex`](投稿格式/cvgip2026_paper.tex), [`投稿格式/cvgip2026_paper.pdf`](投稿格式/cvgip2026_paper.pdf)
+- Word abstract (for submission): [`投稿格式/abstract_for_word.txt`](投稿格式/abstract_for_word.txt)
+
+**Key findings** (label-free internal indices Silhouette / DBI / CHI, on 4,305 real crops):
+- **The backbone is decisive**: DINOv2 reaches Silhouette ≈ 0.49, clearly above ViT (0.42) and ResNet-18 (0.29).
+- **Medoid re-estimation helps**: a multi-seed-validated **+4.5%** (0.486±0.002 vs 0.466±0.009), and it lowers training variance.
+- **Reported honestly**: the additionally explored MML is metric-neutral on DINOv2 and harmful on ViT, so it is **not claimed as a contribution**; sub-clustering is **semi-automatic** (ensemble + light manual consolidation).
+- **K=8** is the best cluster count (best internal indices across the three heads).
+
+---
+
 ## Features
 
 - **Unsupervised clustering**: Uses the SeCu (Stable Cluster Discrimination, ICCV 2023) algorithm to group insect images automatically — no manual labelling required.
 - **Medoid center re-estimation**: Improves the original SeCu by replacing randomly initialized centers with top-k cosine-similarity medoids, boosting clustering stability.
-- **Graph Modularity Loss (MML)**: An extra modularity loss that strengthens intra-cluster similarity and inter-cluster separation.
+- **Graph Modularity Loss (MML)**: An optional modularity loss; our paper's ablation shows it is metric-neutral on DINOv2 and harmful on a plain ViT, so it is reported as an explored extension rather than a contribution.
 - **Three backbones**: ResNet-18, ViT (`vit_base_patch16_224`), and DINOv2 (`vit_base_patch14_reg4_dinov2`).
 - **Full preprocessing pipeline**: From raw sticky-trap photos to trainable image tiles — corner masking, border cropping, tiling, and adaptive cropping tools included.
 - **Clustering evaluation & visualization**: Outputs a 3D t-SNE visualization and a cluster-distribution CSV report; if ground-truth labels are available it also computes ACC / NMI / ARI.

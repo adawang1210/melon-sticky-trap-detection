@@ -6,11 +6,28 @@
 
 ---
 
+## 📄 論文
+
+本專案已**撰寫成完整研究論文**，投稿 **CVGIP 2026**（第 39 屆電腦視覺、圖學暨影像處理研討會）口頭發表組：
+
+> **Unsupervised Deep Clustering for Insect Monitoring on Sticky Traps in Melon Greenhouses with DINOv2 and Hierarchical Sub-clustering**
+
+- 全文：[`投稿格式/cvgip2026_paper.tex`](投稿格式/cvgip2026_paper.tex)、[`投稿格式/cvgip2026_paper.pdf`](投稿格式/cvgip2026_paper.pdf)
+- 投稿用 Word 摘要：[`投稿格式/abstract_for_word.txt`](投稿格式/abstract_for_word.txt)
+
+**主要結論**（以無標籤內在指標 Silhouette / DBI / CHI 評估，4,305 張真實 crop）：
+- **DINOv2 骨幹是關鍵**：Silhouette ≈ 0.49，明顯優於 ViT（0.42）與 ResNet-18（0.29）
+- **Medoid 中心重估有效**：多 seed 驗證 **+4.5%**（0.486±0.002 vs 0.466±0.009），並降低訓練變異
+- **誠實揭露**：額外探索的 MML 在 DINOv2 上為中性、在 ViT 上有害，故**不列為貢獻**；子聚類為**半自動**（ensemble + 輕量人工整理）
+- 分群數 **K=8** 為最佳（三個 head 的內在指標皆最佳）
+
+---
+
 ## 功能特色
 
 - **無監督聚類**：採用 SeCu（Stable Cluster Discrimination, ICCV 2023）演算法，無需人工標註即可將昆蟲影像自動分群
 - **Medoid 中心重估**：改良原始 SeCu，以 top-k cosine similarity medoid 取代隨機初始化中心，提升聚類穩定性
-- **Graph Modularity Loss (MML)**：額外引入圖模組化損失，強化群內相似度與群間分離度
+- **Graph Modularity Loss (MML)**：可選的圖模組化損失；論文實驗顯示在 DINOv2 上對內在指標為中性、在 ViT 上有害，故列為探索項而非貢獻（詳見論文 ablation）
 - **三種骨幹支援**：ResNet-18、ViT (vit_base_patch16_224)、DINOv2 (vit_base_patch14_reg4_dinov2)
 - **完整前處理流程**：從原始黏蟲板照片到可訓練的圖塊資料，提供角落遮蔽、邊框裁切、圖塊切割、自適應裁切等工具
 - **聚類評估與視覺化**：輸出 t-SNE 3D 視覺化與聚類分佈 CSV 報告；若提供 Ground Truth 標籤可額外計算 ACC / NMI / ARI
