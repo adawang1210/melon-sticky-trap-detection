@@ -7,7 +7,7 @@ Unsupervised Deep Clustering for Insect Monitoring on Sticky Traps in
 Melon Greenhouses with DINOv2 and Hierarchical Sub-clustering
 
 AUTHOR
-Chen Kai (王凱)
+Chen Kai (陳楷)
 Department of Information Management, National Central University, Taiwan
 adawang12101210@gmail.com
 
