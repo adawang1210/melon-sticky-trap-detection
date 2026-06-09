@@ -368,17 +368,61 @@ Results from one full inference run (DINOv2 backbone, `clusters_amount=8`, N=430
 - **Source groups**: 925 (sticky-trap / photo IDs)
 - **Clusters**: 8 (cluster 0–7)
 
-| Cluster | Images | Share |
-|---------|--------|-------|
-| 0 | 862 | 20.0% |
-| 1 | 524 | 12.2% |
-| 2 | 745 | 17.3% |
-| 3 | 329 | 7.6% |
-| 4 | 480 | 11.1% |
-| 5 | 649 | 15.1% |
-| 6 | 370 | 8.6% |
-| 7 | 346 | 8.0% |
-| **Total** | **4305** | **100%** |
+| Cluster | Images | Share | Cohesion |
+|---------|--------|-------|----------|
+| 0 | 862 | 20.0% | 0.958 |
+| 1 | 524 | 12.2% | 0.939 |
+| 2 | 745 | 17.3% | 0.957 |
+| 3 | 329 | 7.6% | 0.943 |
+| 4 | 480 | 11.1% | 0.930 |
+| 5 | 649 | 15.1% | 0.938 |
+| 6 | 370 | 8.6% | 0.936 |
+| 7 | 346 | 8.0% | 0.942 |
+| **Total / mean** | **4305** | **100%** | **0.943** |
+
+> Cohesion = mean cosine similarity of a cluster's samples to its mean direction (label-free; higher = tighter).
+
+### Quantitative evaluation (label-free internal indices)
+
+With no ground-truth species labels, we use three label-free internal indices: **Silhouette** (cosine, ↑), **Davies–Bouldin (DBI)** (↓), and **Calinski–Harabasz (CHI)** (↑), all computed on the 128-d L2-normalized embedding (N=4305).
+
+**Backbone × loss**
+
+| Backbone | Loss | Silhouette↑ | DBI↓ | CHI↑ |
+|---|---|---|---|---|
+| ResNet-18 | size | 0.292 | 1.32 | 1483.2 |
+| ResNet-18 | size-mml | 0.313 | 1.26 | 1243.0 |
+| ViT-B | size | 0.421 | 1.29 | 1647.0 |
+| ViT-B | size-mml | 0.237 | 1.17 | 1311.6 |
+| DINOv2 | size | 0.487 | 1.13 | 1438.0 |
+| **DINOv2 / size-mml (released)** | | **0.485** | **1.13** | **1497.6** |
+
+> DINOv2 leads on all indices; DINOv2 size vs size-mml are essentially tied (MML is neutral on the final model).
+
+**Cluster count K** (DINOv2 multi-head)
+
+| K | Silhouette↑ | DBI↓ | CHI↑ |
+|---|---|---|---|
+| **8** | **0.485** | **1.13** | **1498** |
+| 9 | 0.460 | 1.14 | 1472 |
+| 10 | 0.442 | 1.17 | 1408 |
+
+> K=8 is best on all three, hence the released K=8.
+
+**Ablations**
+
+| Block | Setting | Silhouette | Note |
+|---|---|---|---|
+| (a) Medoid (3 seeds) | w/ medoid | **0.486 ± 0.002** | baseline |
+| | w/o medoid | 0.466 ± 0.009 | **+4.5%**, lower variance → medoid helps and stabilizes |
+| (b) MML | w/ MML | 0.485 | — |
+| | w/o MML | 0.487 | removing it slightly higher → MML neutral |
+| (c) Backbone (loss=size) | DINOv2 | 0.487 | baseline |
+| | ViT-B | 0.421 | −14% |
+| | ResNet-18 | 0.292 | −40% |
+| (d) Sub-clustering DR (cluster_0) | PCA + UMAP | 0.339 (12 subs) | cluster-space silhouette |
+| | UMAP-only | 0.348 (12 subs) | tied with PCA+UMAP |
+| | PCA-only | 0.096 (3 subs) | UMAP is the key component |
 
 ### Per-cluster previews
 
