@@ -1,19 +1,17 @@
 ============================================================
-CVGIP 2026 — Oral Track — 論文摘要 (Word, ≤1 page, 100–250 words)
-貼進官方「摘要格式範本.doc」：標題、作者、Abstract、Keywords 依範本欄位填入。
-（本檔僅提供純文字內容；作者/單位/email 請自行補上）
+CVGIP 2026 — Oral Track — Extended Abstract
 ============================================================
 
 TITLE
 Unsupervised Deep Clustering for Insect Monitoring on Sticky Traps in
 Melon Greenhouses with DINOv2 and Hierarchical Sub-clustering
 
-AUTHORS
-<Author One>1, <Author Two>1, <Author Three>2
-1 <Department, University>   2 <Research Institute>
-{author1, author2}@xxx.edu.tw
+AUTHOR
+Chen Kai (王凱)
+Department of Information Management, National Central University, Taiwan
+adawang12101210@gmail.com
 
-ABSTRACT  (~224 words)
+ABSTRACT
 Yellow sticky traps are a standard tool for monitoring flying pests in
 greenhouse agriculture, but counting and identifying the trapped insects is
 still performed manually, which is slow, fatiguing, and difficult to scale
@@ -36,6 +34,5 @@ trap photos, the system produces eight coherent coarse clusters and a finer
 set of sub-clusters. The approach is practical, low in labeling cost, and
 deployable; the full source code is released.
 
-KEYWORDS
-Unsupervised deep clustering; Self-supervised learning; DINOv2;
+Keywords - Unsupervised deep clustering; Self-supervised learning; DINOv2;
 Sticky-trap pest monitoring; Hierarchical sub-clustering
