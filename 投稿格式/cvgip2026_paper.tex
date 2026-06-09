@@ -211,27 +211,9 @@ Total / mean & 4{,}305 & 100\% & 0.943 \\
 \subsection{Qualitative Results}
 Qualitative inspection corroborates the quantitative balance. Fig.~\ref{fig:tsne} shows the 2-D t-SNE embedding of the learned representation, in which the eight clusters form distinguishable regions of the feature space. Fig.~\ref{fig:clusters} presents representative crops from each of the eight clusters in a $2\!\times\!4$ grid; insects within a cluster share a consistent morphology (body shape, color, and size), confirming that the unsupervised grouping is agronomically meaningful. Fig.~\ref{fig:subcluster} illustrates the effect of hierarchical sub-clustering: a single coarse cluster that mixed several near-identical morphologies is split into cleaner sub-groups, with low-confidence samples isolated as ``uncertain.'' Applying the sub-clustering pass across the coarse layer is \emph{semi-automatic}: with default parameters the ensemble tends to over-segment a coarse cluster, so we follow it with a light manual consolidation that merges near-duplicate sub-groups, drops low-quality ones, and sets aside low-stability (``uncertain'') samples. This yields a final organization of $4{,}020$ retained images (of $4{,}305$) into $17$ sub-clusters of widely varying size (Table~\ref{tab:subdist}), from a handful of specimens to over a thousand, reflecting the natural imbalance of pest abundance on real traps.
 
-\begin{table}[t]
-\centering
-\caption{Final sub-cluster sizes after the semi-automatic hierarchical refinement ($17$ sub-clusters, $4{,}020$ images).}
-\label{tab:subdist}
-\small
-\begin{tabular}{@{}cc@{\hspace{1.6em}}cc@{}}
-\toprule
-Sub & Size & Sub & Size \\
-\midrule
-sub\_0 & 350  & sub\_9  & 76 \\
-sub\_1 & 63   & sub\_10 & 126 \\
-sub\_2 & 47   & sub\_11 & 143 \\
-sub\_3 & 19   & sub\_12 & 620 \\
-sub\_4 & 134  & sub\_13 & 137 \\
-sub\_5 & 575  & sub\_14 & 178 \\
-sub\_6 & 72   & sub\_15 & 189 \\
-sub\_7 & 270  & sub\_16 & 7 \\
-sub\_8 & 1014 & Total   & 4{,}020 \\
-\bottomrule
-\end{tabular}
-\end{table}
+% Sub-cluster size table omitted for page-limit compliance;
+% sizes: sub\_0--16 are 350, 63, 47, 19, 134, 575, 72, 270, 1014,
+%         76, 126, 143, 620, 137, 178, 189, 7 (total 4,020).
 
 \subsection{Ablation Study}
 We design four ablations to isolate the contribution of each component, scored with the same label-free indices as Table~\ref{tab:metrics}. Blocks (a)--(c) are evaluated on the main 128-d embedding; block (d) concerns the sub-clustering dimensionality reduction and is evaluated on coarse cluster~0 by the Silhouette of the HDBSCAN partition in its clustering space, with the number of discovered sub-clusters shown in parentheses (it is therefore on a different scale from blocks~(a)--(c)). The $\Delta$ column reports the relative change in Silhouette over the stated baseline.
@@ -271,11 +253,11 @@ The four axes probe, respectively: (a) the effect of anchoring centers on real m
 % =====================================================================
 \section{Discussion}
 
-The main limitation is intrinsic to purely unsupervised training: large pose variation within a single species can cause that species to split across multiple clusters, because appearance---not taxonomy---drives the grouping. Dorsal and lateral views of the same insect, or specimens partially occluded by glue or debris, may land in different clusters. The hierarchical sub-clustering stage mitigates the opposite failure (one cluster mixing species) but does not by itself merge pose-induced splits. A second limitation concerns evaluation: without ground-truth species labels we rely on label-free internal indices (Silhouette, DBI, CHI) and qualitative coherence; absolute label-dependent scores such as ACC/NMI/ARI would require a small annotated validation subset, which we leave for future work. Finally, the hierarchical sub-clustering is only semi-automatic: with default parameters the ensemble over-segments---one coarse cluster can fragment into dozens of groups---so reaching the final $17$ sub-clusters requires a light manual merge-and-prune pass, and automating this consolidation (e.g.\ by stability-guided agglomeration) is itself future work.
+The main limitation is intrinsic to purely unsupervised training: large pose variation within a single species can cause that species to split across multiple clusters, because appearance---not taxonomy---drives the grouping. The hierarchical sub-clustering stage mitigates the opposite failure (one cluster mixing species) but does not merge pose-induced splits. Without ground-truth labels we rely on label-free indices; ACC/NMI/ARI require an annotated validation subset, which we leave for future work. The hierarchical sub-clustering is also semi-automatic: default ensemble parameters tend to over-segment, so the final $17$ sub-clusters were obtained after a light manual merge-and-prune pass; automating this consolidation is a concrete direction for future work.
 
-A further point concerns the role of the deep-clustering stage itself. We observed that clustering the frozen pretrained DINOv2 features directly with $k$-means already yields balanced, non-degenerate groups (normalized size entropy $0.98$ vs.\ $0.97$ for our model), so SeCu does not out-balance naive clustering, and a strict quantitative advantage is hard to establish without ground-truth labels. We nonetheless adopt the DINOv2-based SeCu clustering for three practical reasons: it is end-to-end---a single trained model assigns clusters at inference, with no separate feature-export-and-cluster step; it learns multiple granularities jointly through its $K\!\in\!\{8,9,10\}$ heads; and its size constraint guarantees that no cluster collapses during the joint representation--assignment optimization (smallest/largest size ratio $0.38$). Establishing whether the learned representation yields cleaner clusters than static features---beyond the qualitative coherence visible in Figs.~\ref{fig:clusters} and~\ref{fig:tsne}---again awaits a labeled validation subset.
+A further point concerns the role of the deep-clustering stage itself. Clustering frozen DINOv2 features with $k$-means already yields balanced groups (normalized size entropy $0.98$ vs.\ $0.97$ for our model). We nonetheless adopt DINOv2-based SeCu for three practical reasons: it is end-to-end, it learns multiple granularities jointly through its $K\!\in\!\{8,9,10\}$ heads, and its size constraint guarantees no cluster collapses (smallest/largest ratio $0.38$).
 
-For future work, the most promising direction is to treat the produced clusters as pseudo-labels for semi-supervised fine-tuning. An agronomist would name and, where needed, merge a handful of clusters or sub-clusters; these verified groups then supervise a lightweight classifier or detector, closing the loop from zero-label discovery to deployable, named-species monitoring at a fraction of the usual annotation cost. Pose-invariant augmentation and multi-view consolidation are natural complements to reduce species splitting. Finally, our modularity loss is metric-neutral under its current weight and late-activation schedule and is backbone-sensitive; revisiting its formulation, weighting, and schedule is a concrete avenue to turn it into a genuine benefit.
+For future work, the most promising direction is semi-supervised fine-tuning using the clusters as pseudo-labels. An agronomist names a handful of groups; these supervise a lightweight classifier, closing the loop from zero-label discovery to deployable pest monitoring.
 
 % =====================================================================
 \section{Conclusion}
@@ -439,14 +421,14 @@ J.-W.~Hong, W.-C.~Lin, and C.-H.~Hsu,
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.95\linewidth]{subcluster_example.png}
+  \includegraphics[width=0.90\linewidth]{subcluster_example.png}
   \caption{Hierarchical sub-clustering on a single coarse cluster. The mixed coarse cluster (top) is split into cleaner sub-groups (bottom) by the ensemble HDBSCAN stage, with low-stability samples isolated as ``uncertain.''}
   \label{fig:subcluster}
 \end{figure}
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.95\linewidth]{tsne.png}
+  \includegraphics[width=0.90\linewidth]{tsne.png}
   \caption{2-D t-SNE visualization (cosine metric) of the learned 128-d embedding for the eight coarse clusters of our released model. The clusters occupy distinct, well-separated regions, indicating that the unsupervised representation captures meaningful morphological differences.}
   \label{fig:tsne}
 \end{figure}
