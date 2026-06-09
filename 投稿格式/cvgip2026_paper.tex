@@ -220,14 +220,15 @@ We design four ablations to isolate the contribution of each component, scored w
 
 \begin{table}[t]
 \centering
-\caption{Ablation study under label-free indices (Silhouette~$\uparrow$, DBI~$\downarrow$, CHI~$\uparrow$). $\Delta$ = relative change in Silhouette over the stated baseline. Block (d) reports the HDBSCAN clustering-space Silhouette on coarse cluster~0 (sub-cluster count in parentheses) and is not comparable to (a)--(c).}
+\caption{Ablation under label-free indices (Silh.\,$\uparrow$, DBI\,$\downarrow$, CHI\,$\uparrow$). $\Delta$ = relative Silhouette change. Block~(d) reports clustering-space Silhouette on cluster~0 (sub-count in parentheses); not comparable to (a)--(c).}
 \label{tab:ablation}
+\resizebox{\columnwidth}{!}{%
 \small
 \begin{tabular}{@{}lcccc@{}}
 \toprule
 Setting & Silh.\,$\uparrow$ & DBI\,$\downarrow$ & CHI\,$\uparrow$ & $\Delta$ \\
 \midrule
-\multicolumn{5}{l}{\textit{(a) Medoid re-estimation (mean$\pm$std over 3 seeds)}}\\
+\multicolumn{5}{l}{\textit{(a) Medoid re-estimation (mean$\,\pm\,$std, 3 seeds)}} \\
 Full model (w/ medoid)  & $0.486{\pm}0.002$ & 1.17 & 1537 & --- \\
 \;\; w/o medoid         & $0.466{\pm}0.009$ & 1.17 & 1200 & $-4.3\%$ \\
 \midrule
@@ -245,10 +246,11 @@ PCA-only (3 sub)            & 0.096 & --- & --- & $-72\%$ \\
 UMAP-only (12 sub)          & 0.348 & --- & --- & $+3\%$ \\
 PCA $+$ UMAP, ours (12 sub) & 0.339 & --- & --- & --- \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
-The four axes probe, respectively: (a) the effect of anchoring centers on real medoids; (b) the effect of the modularity term; (c) the value of strong self-supervised features (DINOv2) over ResNet-18 and a plain ViT; and (d) the role of each reducer in the sub-clustering stage. We report the outcomes honestly, including where a component does not help. (a)~Medoid re-estimation gives a consistent improvement: averaged over three seeds, Silhouette is $0.486{\pm}0.002$ with it versus $0.466{\pm}0.009$ without ($+4.5\%$), and it also markedly reduces the seed-to-seed variance, confirming the gain is not a single-seed artifact. (c)~The backbone is the decisive factor: at a fixed size loss, DINOv2 ($0.487$) clearly outperforms ViT-B ($0.421$, $-14\%$) and ResNet-18 ($0.292$, $-40\%$), confirming the value of strong self-supervised features for fine-grained insect appearance. (b)~In contrast, the modularity loss does \emph{not} help: removing MML leaves the internal indices essentially unchanged on DINOv2 ($0.487$ vs.\ $0.485$), and Table~\ref{tab:metrics} shows that MML markedly degrades a plain ViT ($0.421\!\to\!0.237$). We therefore present MML as a metric-neutral, backbone-sensitive extension rather than a contribution. (d)~UMAP is the decisive reducer in the sub-clustering stage: without it (PCA-only) HDBSCAN resolves coarse cluster~0 into only three sub-groups with weak cohesion (Silhouette $0.10$), whereas adding UMAP yields twelve cohesive sub-clusters (Silhouette $\approx\!0.34$); PCA$+$UMAP essentially matches UMAP-only ($0.339$ vs.\ $0.348$) while reducing the pre-UMAP dimensionality from $1738$ to $436$, so PCA acts as a cheap, quality-preserving pre-reduction.
+{\sloppy The four axes probe, respectively: (a) the effect of anchoring centers on real medoids; (b) the effect of the modularity term; (c) the value of strong self-supervised features (DINOv2) over ResNet-18 and a plain ViT; and (d) the role of each reducer in the sub-clustering stage. We report the outcomes honestly, including where a component does not help. (a)~Medoid re-estimation gives a consistent improvement: averaged over three seeds, Silhouette is $0.486{\pm}0.002$ with it versus $0.466{\pm}0.009$ without ($+4.5\%$), and it also markedly reduces the seed-to-seed variance, confirming the gain is not a single-seed artifact. (c)~The backbone is the decisive factor: at a fixed size loss, DINOv2 ($0.487$) clearly outperforms ViT-B ($0.421$, $-14\%$) and ResNet-18 ($0.292$, $-40\%$), confirming the value of strong self-supervised features for fine-grained insect appearance. (b)~In contrast, the modularity loss does \emph{not} help: removing MML leaves the internal indices essentially unchanged on DINOv2 ($0.487$ vs.\ $0.485$), and Table~\ref{tab:metrics} shows that MML markedly degrades a plain ViT ($0.421\!\to\!0.237$). We therefore present MML as a metric-neutral, backbone-sensitive extension rather than a contribution. (d)~UMAP is the decisive reducer in the sub-clustering stage: without it (PCA-only) HDBSCAN resolves coarse cluster~0 into only three sub-groups with weak cohesion (Silhouette $0.10$), whereas adding UMAP yields twelve cohesive sub-clusters (Silhouette $\approx\!0.34$); PCA$+$UMAP essentially matches UMAP-only ($0.339$ vs.\ $0.348$) while reducing the pre-UMAP dimensionality from $1738$ to $436$, so PCA acts as a cheap, quality-preserving pre-reduction.}
 
 % =====================================================================
 \section{Discussion}
@@ -380,17 +382,17 @@ J.-W.~Hong, W.-C.~Lin, and C.-H.~Hsu,
   \centering
   \begin{tikzpicture}[
     font=\scriptsize,
-    box/.style={draw, rounded corners, align=center, text width=2.05cm,
+    box/.style={draw, rounded corners, align=center, text width=1.85cm,
                 minimum height=1.25cm, fill=blue!5, inner sep=2pt},
     arr/.style={-{Stealth[length=2mm]}, thick},
-    node distance=0.4cm,
+    node distance=0.3cm,
   ]
     \node[box] (raw) {Raw board\\photo};
     \node[box, right=of raw] (pre) {Preprocess:\\corner mask,\\border crop,\\adaptive tiling};
     \node[box, right=of pre] (crop) {Single-insect\\crops\\($4{,}305$)};
     \node[box, right=of crop, fill=green!8] (train) {Training:\\DINOv2 $+$ SeCu\\$+$ medoid};
     \node[box, right=of train] (inf) {Inference:\\assign 8\\coarse clusters};
-    \node[box, right=of inf, fill=orange!8] (sub) {Sub-clustering:\\DINOv2$+$HSV$+$size,\\PCA$+$UMAP,\\ensemble HDBSCAN};
+    \node[box, right=of inf, fill=orange!8] (sub) {Sub-clustering:\\DINOv2$+$HSV\\$+$size,\\PCA$+$UMAP,\\ensemble HDBSCAN};
     \draw[arr] (raw) -- (pre);
     \draw[arr] (pre) -- (crop);
     \draw[arr] (crop) -- (train);
